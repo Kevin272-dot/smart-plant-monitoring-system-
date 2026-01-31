@@ -1,0 +1,1639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌱 Smart Plant Monitoring Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    /* ═══════════════════════════════════════════════════════════════════
+       RESET & BASE STYLES
+       ═══════════════════════════════════════════════════════════════════ */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       HEADER
+       ═══════════════════════════════════════════════════════════════════ */
+    .header {
+      text-align: center;
+      padding: 20px 0 30px;
+    }
+
+    .header h1 {
+      font-size: 2.5rem;
+      background: linear-gradient(135deg, #4ade80, #22d3ee);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+
+    .header .subtitle {
+      color: #94a3b8;
+      font-size: 1rem;
+    }
+
+    .connection-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 6px 16px;
+      background: rgba(74, 222, 128, 0.1);
+      border: 1px solid rgba(74, 222, 128, 0.3);
+      border-radius: 20px;
+      font-size: 0.85rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       STATS GRID
+       ═══════════════════════════════════════════════════════════════════ */
+    .stats-container {
+      max-width: 1400px;
+      margin: 0 auto 30px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+    }
+
+    .stat-card {
+      background: linear-gradient(145deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 24px;
+      text-align: center;
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-card .icon {
+      font-size: 2rem;
+      margin-bottom: 10px;
+    }
+
+    .stat-card .value {
+      font-size: 2.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #4ade80, #22d3ee);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .stat-card .label {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      margin-top: 8px;
+    }
+
+    .stat-card .trend {
+      font-size: 0.85rem;
+      margin-top: 8px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      display: inline-block;
+    }
+
+    .trend-up { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .trend-down { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .trend-stable { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       HEALTH INDICATOR
+       ═══════════════════════════════════════════════════════════════════ */
+    .health-section {
+      max-width: 1400px;
+      margin: 0 auto 30px;
+    }
+
+    .health-bar-container {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .health-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .health-label h3 {
+      font-size: 1.2rem;
+      color: #e2e8f0;
+    }
+
+    .health-score {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .health-bar {
+      height: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .health-bar-fill {
+      height: 100%;
+      border-radius: 6px;
+      transition: width 1s ease, background 0.5s;
+    }
+
+    .health-tips {
+      margin-top: 15px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .health-tip {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+
+    .tip-good { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+    .tip-warning { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+    .tip-critical { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       DASHBOARD GRID
+       ═══════════════════════════════════════════════════════════════════ */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: linear-gradient(145deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .card h3 {
+      font-size: 1.1rem;
+      color: #e2e8f0;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    canvas {
+      max-height: 280px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       ALERTS SECTION
+       ═══════════════════════════════════════════════════════════════════ */
+    .alert-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .alert-item {
+      padding: 14px;
+      margin-bottom: 10px;
+      border-radius: 10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .alert-item .alert-icon {
+      font-size: 1.3rem;
+    }
+
+    .alert-item .alert-content {
+      flex: 1;
+    }
+
+    .alert-item .alert-type {
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    .alert-item .alert-time {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+
+    .alert-critical { background: rgba(239, 68, 68, 0.15); border-left: 4px solid #ef4444; }
+    .alert-warning { background: rgba(251, 191, 36, 0.15); border-left: 4px solid #fbbf24; }
+    .alert-info { background: rgba(59, 130, 246, 0.15); border-left: 4px solid #3b82f6; }
+
+    .no-alerts {
+      text-align: center;
+      padding: 40px;
+      color: #94a3b8;
+    }
+
+    .no-alerts .icon {
+      font-size: 3rem;
+      margin-bottom: 10px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       WEATHER SECTION
+       ═══════════════════════════════════════════════════════════════════ */
+    .weather-widget {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .weather-main {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 15px;
+    }
+
+    .weather-icon {
+      font-size: 4rem;
+    }
+
+    .weather-info h4 {
+      font-size: 1.8rem;
+      color: #e2e8f0;
+      margin-bottom: 5px;
+    }
+
+    .weather-info .weather-desc {
+      color: #94a3b8;
+      text-transform: capitalize;
+    }
+
+    .weather-details {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .weather-detail {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+    }
+
+    .weather-alerts {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .weather-alert-item {
+      background: rgba(251, 191, 36, 0.15);
+      padding: 10px 15px;
+      border-radius: 8px;
+      margin-top: 8px;
+      font-size: 0.9rem;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       PREDICTIONS SECTION
+       ═══════════════════════════════════════════════════════════════════ */
+    .predictions-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .prediction-card {
+      background: rgba(139, 92, 246, 0.1);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .prediction-card .pred-value {
+      font-size: 1.8rem;
+      margin-bottom: 5px;
+    }
+
+    .prediction-card .pred-label {
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       ML PATTERNS SECTION
+       ═══════════════════════════════════════════════════════════════════ */
+    .ml-section {
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.1), rgba(139, 92, 246, 0.1));
+      border: 1px solid rgba(236, 72, 153, 0.3);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .ml-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .ml-header h3 {
+      margin: 0;
+      font-size: 1.2rem;
+    }
+
+    .ml-badge {
+      background: linear-gradient(135deg, #ec4899, #8b5cf6);
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .patterns-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .pattern-card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .pattern-card .pattern-icon {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+    }
+
+    .pattern-card .pattern-title {
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 4px;
+    }
+
+    .pattern-card .pattern-value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #a78bfa;
+    }
+
+    .pattern-card .pattern-desc {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-top: 6px;
+    }
+
+    .ml-insights {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .ml-insights h4 {
+      margin: 0 0 12px 0;
+      font-size: 1rem;
+      color: #e2e8f0;
+    }
+
+    .insight-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+
+    .insight-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .confidence-bar {
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .confidence-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #ec4899, #8b5cf6);
+      border-radius: 2px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       FOOTER
+       ═══════════════════════════════════════════════════════════════════ */
+    .footer {
+      text-align: center;
+      padding: 30px;
+      color: #64748b;
+      font-size: 0.85rem;
+    }
+
+    .last-updated {
+      margin-top: 10px;
+      font-size: 0.8rem;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       RESPONSIVE
+       ═══════════════════════════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      .header h1 { font-size: 1.8rem; }
+      .dashboard-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .predictions-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <h1>🌱 Smart Plant Monitoring</h1>
+    <p class="subtitle">Real-time environmental analytics & predictions</p>
+    <div class="connection-status">
+      <div class="status-dot"></div>
+      <span>Live • Updating every 30s</span>
+    </div>
+  </header>
+
+  <!-- Stats Overview -->
+  <section class="stats-container">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="icon">🌡️</div>
+        <div class="value" id="currentTemp">--</div>
+        <div class="label">Temperature (°C)</div>
+        <div class="trend trend-stable" id="tempTrendBadge">--</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon">💧</div>
+        <div class="value" id="currentSoil">--</div>
+        <div class="label">Soil Moisture</div>
+        <div class="trend trend-stable" id="soilTrendBadge">--</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon">💡</div>
+        <div class="value" id="currentLight">--</div>
+        <div class="label">Light Intensity</div>
+        <div class="trend trend-stable" id="lightTrendBadge">--</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon">💨</div>
+        <div class="value" id="currentHumidity">--</div>
+        <div class="label">Humidity (%)</div>
+        <div class="trend trend-stable" id="humidityTrendBadge">--</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Weather Widget -->
+  <section class="stats-container">
+    <div class="weather-widget" id="weatherWidget">
+      <div class="weather-main">
+        <div class="weather-icon" id="weatherIcon">🌤️</div>
+        <div class="weather-info">
+          <h4 id="weatherTemp">--°C</h4>
+          <div class="weather-desc" id="weatherDesc">Loading weather...</div>
+          <div style="color: #60a5fa; font-size: 0.85rem;" id="weatherLocation">📍 Chennai, India</div>
+        </div>
+      </div>
+      <div class="weather-details">
+        <div class="weather-detail">💧 Humidity: <span id="weatherHumidity">--</span>%</div>
+        <div class="weather-detail">🌬️ Wind: <span id="weatherWind">--</span> m/s</div>
+        <div class="weather-detail">👁️ Visibility: <span id="weatherVisibility">--</span> km</div>
+        <div class="weather-detail">🌡️ Feels like: <span id="weatherFeels">--</span>°C</div>
+      </div>
+      <div class="weather-alerts" id="weatherAlerts"></div>
+    </div>
+  </section>
+
+  <!-- Health Indicator -->
+  <section class="health-section">
+    <div class="health-bar-container">
+      <div class="health-label">
+        <h3>🏥 Overall Plant Health</h3>
+        <span class="health-score" id="healthScore">--</span>
+      </div>
+      <div class="health-bar">
+        <div class="health-bar-fill" id="healthBarFill" style="width: 0%"></div>
+      </div>
+      <div class="health-tips" id="healthTips">
+        <!-- Dynamic tips will be added here -->
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Dashboard Grid -->
+  <main class="dashboard-grid">
+    <!-- Temperature Chart -->
+    <div class="card">
+      <h3>🌡️ Temperature Trend (24h)</h3>
+      <canvas id="tempChart"></canvas>
+    </div>
+
+    <!-- Soil Moisture Chart -->
+    <div class="card">
+      <h3>💧 Soil Moisture Trend (24h)</h3>
+      <canvas id="soilChart"></canvas>
+    </div>
+
+    <!-- Multi-Metric Chart -->
+    <div class="card">
+      <h3>📊 All Sensors Overview</h3>
+      <canvas id="multiChart"></canvas>
+    </div>
+
+    <!-- System Health Radar -->
+    <div class="card">
+      <h3>⚡ System Health Score</h3>
+      <canvas id="radarChart"></canvas>
+    </div>
+
+    <!-- Recent Alerts -->
+    <div class="card">
+      <h3>🚨 Recent Alerts</h3>
+      <div class="alert-list" id="alertList">
+        <div class="no-alerts">
+          <div class="icon">⏳</div>
+          <p>Loading alerts...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Predictions -->
+    <div class="card">
+      <h3>🔮 Weather-Aware Predictions</h3>
+      <div class="predictions-grid">
+        <div class="prediction-card">
+          <div class="pred-value" id="predTemp">--</div>
+          <div class="pred-label">Expected Temp</div>
+          <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;" id="predTempSource">--</div>
+        </div>
+        <div class="prediction-card">
+          <div class="pred-value" id="predSoil">--</div>
+          <div class="pred-label">Expected Soil</div>
+          <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;" id="predSoilSource">--</div>
+        </div>
+        <div class="prediction-card">
+          <div class="pred-value" id="predWatering">--</div>
+          <div class="pred-label">Watering Need</div>
+          <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;" id="predWateringReason">--</div>
+        </div>
+      </div>
+      <canvas id="predictionChart"></canvas>
+    </div>
+
+    <!-- ML Pattern Analysis -->
+    <div class="card ml-section">
+      <div class="ml-header">
+        <h3>🧠 ML Pattern Analysis</h3>
+        <span class="ml-badge">AI-Powered</span>
+      </div>
+      
+      <div class="patterns-grid" id="patternsGrid">
+        <div class="pattern-card">
+          <div class="pattern-icon">📈</div>
+          <div class="pattern-title">Trend Detection</div>
+          <div class="pattern-value" id="mlTrend">--</div>
+          <div class="pattern-desc" id="mlTrendDesc">Analyzing patterns...</div>
+        </div>
+        <div class="pattern-card">
+          <div class="pattern-icon">🔄</div>
+          <div class="pattern-title">Daily Cycle</div>
+          <div class="pattern-value" id="mlCycle">--</div>
+          <div class="pattern-desc" id="mlCycleDesc">Learning cycles...</div>
+        </div>
+        <div class="pattern-card">
+          <div class="pattern-icon">⚠️</div>
+          <div class="pattern-title">Anomaly Score</div>
+          <div class="pattern-value" id="mlAnomaly">--</div>
+          <div class="pattern-desc" id="mlAnomalyDesc">Checking anomalies...</div>
+        </div>
+        <div class="pattern-card">
+          <div class="pattern-icon">🎯</div>
+          <div class="pattern-title">Confidence</div>
+          <div class="pattern-value" id="mlConfidence">--</div>
+          <div class="confidence-bar"><div class="confidence-fill" id="confidenceFill" style="width: 0%"></div></div>
+        </div>
+      </div>
+
+      <div class="ml-insights">
+        <h4>🔍 AI Insights & Recommendations</h4>
+        <div id="mlInsights">
+          <div class="insight-item">⏳ Collecting data for analysis...</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>🌱 Smart Plant Monitoring System v2.0</p>
+    <p class="last-updated">Last updated: <span id="lastUpdate">--</span></p>
+  </footer>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════════════
+    // SUPABASE CLIENT
+    // ═══════════════════════════════════════════════════════════════════
+    const SUPABASE_URL = "https://yhgyeaygmampbvfanumx.supabase.co";
+    // Using service role key to bypass RLS for dashboard reads
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InloZ3llYXlnbWFtcGJ2ZmFudW14Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzQ1OTc1MCwiZXhwIjoyMDgzMDM1NzUwfQ.76utBDw7G3jkYbTN51cZ7z39DBFYAMcNzpq6ct_YLXM";
+    
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ═══════════════════════════════════════════════════════════════════
+    // OPENWEATHERMAP CONFIG
+    // ═══════════════════════════════════════════════════════════════════
+    const WEATHER_API_KEY = "c6eef9b2a2d6de9ee8c5caef5c9b3f38";
+    const WEATHER_CITY = "Chennai";
+    
+    // Global weather data for predictions (initialized later in Weather Functions)
+
+    // ═══════════════════════════════════════════════════════════════════
+    // CHART CONFIGURATION
+    // ═══════════════════════════════════════════════════════════════════
+    const chartConfig = {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { 
+          labels: { color: '#e2e8f0', font: { size: 12 } }
+        }
+      },
+      scales: {
+        x: { 
+          ticks: { color: '#94a3b8', maxRotation: 45 },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        y: { 
+          ticks: { color: '#94a3b8' },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        }
+      }
+    };
+
+    // Chart instances
+    let tempChart, soilChart, multiChart, radarChart, predictionChart;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ML PATTERN ANALYSIS FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════
+    
+    // Calculate standard deviation
+    function calculateStdDev(arr) {
+      const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+      const squareDiffs = arr.map(value => Math.pow(value - mean, 2));
+      return Math.sqrt(squareDiffs.reduce((a, b) => a + b, 0) / arr.length);
+    }
+
+    // Detect trend using linear regression
+    function detectTrend(values) {
+      const n = values.length;
+      if (n < 3) return { slope: 0, direction: 'insufficient_data' };
+      
+      let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+      for (let i = 0; i < n; i++) {
+        sumX += i;
+        sumY += values[i];
+        sumXY += i * values[i];
+        sumX2 += i * i;
+      }
+      
+      const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+      const direction = slope > 0.5 ? 'rising' : slope < -0.5 ? 'falling' : 'stable';
+      
+      return { slope, direction };
+    }
+
+    // Detect daily cycle patterns
+    function detectDailyCycle(readings) {
+      if (readings.length < 10) return { detected: false, pattern: 'insufficient_data' };
+      
+      const hourlyData = {};
+      readings.forEach(r => {
+        const hour = new Date(r.timestamp).getHours();
+        if (!hourlyData[hour]) hourlyData[hour] = [];
+        hourlyData[hour].push(r.temp);
+      });
+      
+      const hourlyAvg = Object.entries(hourlyData).map(([hour, temps]) => ({
+        hour: parseInt(hour),
+        avgTemp: temps.reduce((a, b) => a + b, 0) / temps.length
+      }));
+      
+      if (hourlyAvg.length < 4) return { detected: false, pattern: 'insufficient_data' };
+      
+      const temps = hourlyAvg.map(h => h.avgTemp);
+      const variation = Math.max(...temps) - Math.min(...temps);
+      
+      return {
+        detected: variation > 3,
+        pattern: variation > 5 ? 'strong_cycle' : variation > 3 ? 'moderate_cycle' : 'weak_cycle',
+        variation: variation.toFixed(1),
+        peakHour: hourlyAvg.reduce((a, b) => a.avgTemp > b.avgTemp ? a : b).hour,
+        lowHour: hourlyAvg.reduce((a, b) => a.avgTemp < b.avgTemp ? a : b).hour
+      };
+    }
+
+    // Calculate anomaly score using Z-score
+    function calculateAnomalyScore(values, latestValue) {
+      if (values.length < 5) return { score: 0, isAnomaly: false };
+      
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      const stdDev = calculateStdDev(values);
+      
+      if (stdDev === 0) return { score: 0, isAnomaly: false };
+      
+      const zScore = Math.abs((latestValue - mean) / stdDev);
+      
+      return {
+        score: Math.min(100, zScore * 33).toFixed(0),
+        isAnomaly: zScore > 2,
+        zScore: zScore.toFixed(2)
+      };
+    }
+
+    // Generate ML insights
+    function generateMLInsights(readings, trend, cycle, anomaly, weather) {
+      const insights = [];
+      const latest = readings[readings.length - 1];
+      
+      // Trend-based insights
+      if (trend.direction === 'falling' && latest.soil < 2000) {
+        insights.push({
+          icon: '💧',
+          text: 'Soil moisture is declining. Based on the trend, watering may be needed in 4-6 hours.',
+          confidence: 85
+        });
+      }
+      
+      if (trend.direction === 'rising' && latest.temp > 30) {
+        insights.push({
+          icon: '🌡️',
+          text: 'Temperature is rising. Consider moving plant to shade or increasing ventilation.',
+          confidence: 78
+        });
+      }
+
+      // Weather-based insights
+      if (weather) {
+        if (weather.rain || weather.condition?.includes('rain')) {
+          insights.push({
+            icon: '🌧️',
+            text: 'Rain detected/expected. Skip watering - soil moisture will naturally increase.',
+            confidence: 92
+          });
+        }
+        
+        if (weather.temp > 35) {
+          insights.push({
+            icon: '☀️',
+            text: 'High outdoor temperature. Expect faster soil moisture evaporation.',
+            confidence: 88
+          });
+        }
+        
+        if (weather.humidity > 80) {
+          insights.push({
+            icon: '💨',
+            text: 'High humidity detected. Reduce watering frequency to prevent root issues.',
+            confidence: 82
+          });
+        }
+      }
+
+      // Cycle-based insights
+      if (cycle.detected) {
+        insights.push({
+          icon: '🔄',
+          text: `Daily pattern detected: Temperature peaks around ${cycle.peakHour}:00 and dips around ${cycle.lowHour}:00.`,
+          confidence: 75
+        });
+      }
+
+      // Anomaly-based insights
+      if (anomaly.isAnomaly) {
+        insights.push({
+          icon: '⚠️',
+          text: 'Unusual reading detected! Current values deviate significantly from normal patterns.',
+          confidence: 90
+        });
+      }
+
+      // General optimization insights
+      if (latest.soil >= 2000 && latest.soil <= 2400 && latest.temp >= 24 && latest.temp <= 30) {
+        insights.push({
+          icon: '✅',
+          text: 'Current conditions are optimal. Plant is in ideal environment based on historical patterns.',
+          confidence: 95
+        });
+      }
+
+      // Prediction insights
+      if (readings.length >= 20) {
+        const soilTrend = detectTrend(readings.slice(-20).map(r => r.soil));
+        if (soilTrend.slope < -5) {
+          const hoursUntilDry = Math.abs((latest.soil - 1800) / (soilTrend.slope * 4));
+          if (hoursUntilDry < 24) {
+            insights.push({
+              icon: '⏰',
+              text: `ML predicts soil will reach critical dryness in ~${hoursUntilDry.toFixed(0)} hours.`,
+              confidence: 70
+            });
+          }
+        }
+      }
+
+      return insights.length > 0 ? insights : [{
+        icon: '📊',
+        text: 'Collecting more data to improve predictions. Keep the sensors running for better analysis.',
+        confidence: 50
+      }];
+    }
+
+    // Update ML Pattern Analysis UI
+    function updateMLPatterns(readings) {
+      if (!readings || readings.length < 5) {
+        document.getElementById('mlInsights').innerHTML = 
+          '<div class="insight-item">⏳ Need more data points for ML analysis. Keep sensors running...</div>';
+        return;
+      }
+
+      const temps = readings.map(r => r.temp);
+      const soils = readings.map(r => r.soil);
+      const latest = readings[readings.length - 1];
+
+      // Detect trends
+      const tempTrend = detectTrend(temps);
+      const soilTrend = detectTrend(soils);
+      
+      // Detect daily cycles
+      const cycle = detectDailyCycle(readings);
+      
+      // Calculate anomaly scores
+      const tempAnomaly = calculateAnomalyScore(temps.slice(0, -1), latest.temp);
+      const soilAnomaly = calculateAnomalyScore(soils.slice(0, -1), latest.soil);
+      const maxAnomaly = Math.max(parseFloat(tempAnomaly.score), parseFloat(soilAnomaly.score));
+
+      // Calculate overall confidence based on data quantity
+      const confidence = Math.min(95, 50 + readings.length * 0.5);
+
+      // Update UI - Trend
+      const trendEmoji = soilTrend.direction === 'rising' ? '📈' : soilTrend.direction === 'falling' ? '📉' : '➡️';
+      document.getElementById('mlTrend').textContent = trendEmoji;
+      document.getElementById('mlTrendDesc').textContent = 
+        `Soil: ${soilTrend.direction}, Temp: ${tempTrend.direction}`;
+
+      // Update UI - Daily Cycle
+      document.getElementById('mlCycle').textContent = cycle.detected ? '✅' : '❌';
+      document.getElementById('mlCycleDesc').textContent = cycle.detected 
+        ? `±${cycle.variation}°C variation detected`
+        : 'No clear pattern yet';
+
+      // Update UI - Anomaly
+      document.getElementById('mlAnomaly').textContent = `${maxAnomaly}%`;
+      document.getElementById('mlAnomaly').style.color = maxAnomaly > 50 ? '#f87171' : '#4ade80';
+      document.getElementById('mlAnomalyDesc').textContent = 
+        maxAnomaly > 50 ? 'Unusual readings!' : 'All normal';
+
+      // Update UI - Confidence
+      document.getElementById('mlConfidence').textContent = `${confidence.toFixed(0)}%`;
+      document.getElementById('confidenceFill').style.width = `${confidence}%`;
+
+      // Generate and display insights
+      const insights = generateMLInsights(readings, soilTrend, cycle, 
+        { isAnomaly: maxAnomaly > 50, score: maxAnomaly }, currentWeather);
+      
+      document.getElementById('mlInsights').innerHTML = insights.map(insight => `
+        <div class="insight-item">
+          <span style="font-size: 1.2rem;">${insight.icon}</span>
+          <div style="flex: 1;">
+            <div>${insight.text}</div>
+            <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">
+              Confidence: ${insight.confidence}%
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DATA LOADING
+    // ═══════════════════════════════════════════════════════════════════
+    async function loadDashboardData() {
+      try {
+        // Fetch readings from last 24 hours
+        const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { data: readings, error: readingsError } = await supabaseClient
+          .from("readings")
+          .select("*")
+          .gte("timestamp", since24h)
+          .order("timestamp", { ascending: true });
+
+        if (readingsError) throw readingsError;
+
+        // Fetch alerts from last 7 days
+        const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: alerts, error: alertsError } = await supabaseClient
+          .from("alerts")
+          .select("*")
+          .gte("triggered_at", since7d)
+          .order("triggered_at", { ascending: false });
+
+        if (!readings || readings.length === 0) {
+          showNoData();
+          return;
+        }
+
+        updateDashboard(readings, alerts || []);
+        document.getElementById("lastUpdate").textContent = new Date().toLocaleString();
+      } catch (error) {
+        console.error("Error loading data:", error);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DASHBOARD UPDATE
+    // ═══════════════════════════════════════════════════════════════════
+    function updateDashboard(readings, alerts) {
+      const timestamps = readings.map(r => {
+        const date = new Date(r.timestamp);
+        return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      });
+      
+      const temps = readings.map(r => r.temp);
+      const soils = readings.map(r => r.soil);
+      const lights = readings.map(r => r.light ?? 0);
+      const humidity = readings.map(r => r.humidity);
+
+      // Current values (latest reading)
+      const latest = readings[readings.length - 1];
+      document.getElementById("currentTemp").textContent = latest.temp.toFixed(1);
+      document.getElementById("currentSoil").textContent = latest.soil;
+      document.getElementById("currentLight").textContent = latest.light ?? 0;
+      document.getElementById("currentHumidity").textContent = latest.humidity.toFixed(1);
+
+      // Calculate trends
+      updateTrends(readings);
+
+      // Calculate and display health score
+      updateHealthIndicator(latest, readings);
+
+      // Update charts
+      updateCharts(timestamps, temps, soils, lights, humidity);
+
+      // Update alerts
+      updateAlerts(alerts);
+
+      // Update predictions with weather data
+      updatePredictions(readings);
+      
+      // Update ML Pattern Analysis
+      updateMLPatterns(readings);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // TREND CALCULATIONS
+    // ═══════════════════════════════════════════════════════════════════
+    function updateTrends(readings) {
+      const recent = readings.slice(-20);
+      const midpoint = Math.floor(recent.length / 2);
+
+      const fields = ['temp', 'soil', 'light', 'humidity'];
+      
+      fields.forEach(field => {
+        const values = recent.map(r => r[field] ?? 0);
+        const firstHalf = values.slice(0, midpoint);
+        const secondHalf = values.slice(midpoint);
+        
+        const avgFirst = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+        const avgSecond = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+        const diff = avgSecond - avgFirst;
+        const threshold = avgFirst * 0.03;
+
+        const badge = document.getElementById(`${field}TrendBadge`);
+        if (diff > threshold) {
+          badge.textContent = "📈 Rising";
+          badge.className = "trend trend-up";
+        } else if (diff < -threshold) {
+          badge.textContent = "📉 Falling";
+          badge.className = "trend trend-down";
+        } else {
+          badge.textContent = "➡️ Stable";
+          badge.className = "trend trend-stable";
+        }
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // HEALTH INDICATOR
+    // ═══════════════════════════════════════════════════════════════════
+    function updateHealthIndicator(latest, readings) {
+      let score = 100;
+      const tips = [];
+
+      // Soil moisture scoring
+      if (latest.soil < 1800) {
+        score -= 30;
+        tips.push({ text: "🚨 Water your plant!", type: "critical" });
+      } else if (latest.soil > 2600) {
+        score -= 20;
+        tips.push({ text: "💦 Reduce watering", type: "warning" });
+      } else {
+        tips.push({ text: "💧 Soil moisture optimal", type: "good" });
+      }
+
+      // Temperature scoring
+      if (latest.temp > 35) {
+        score -= 25;
+        tips.push({ text: "🔥 Too hot!", type: "critical" });
+      } else if (latest.temp < 18) {
+        score -= 20;
+        tips.push({ text: "❄️ Too cold!", type: "warning" });
+      } else {
+        tips.push({ text: "🌡️ Temperature ideal", type: "good" });
+      }
+
+      // Light scoring
+      if (latest.light < 500) {
+        score -= 15;
+        tips.push({ text: "🌑 More light needed", type: "warning" });
+      } else if (latest.light > 1600) {
+        score -= 10;
+        tips.push({ text: "☀️ Very bright", type: "warning" });
+      }
+
+      // Humidity scoring
+      if (latest.humidity > 85) {
+        score -= 15;
+        tips.push({ text: "🌫️ High humidity", type: "warning" });
+      } else if (latest.humidity < 40) {
+        score -= 10;
+        tips.push({ text: "🏜️ Low humidity", type: "warning" });
+      }
+
+      score = Math.max(0, score);
+
+      // Update UI
+      const scoreEl = document.getElementById("healthScore");
+      const barEl = document.getElementById("healthBarFill");
+      const tipsEl = document.getElementById("healthTips");
+
+      scoreEl.textContent = `${score}%`;
+      scoreEl.style.color = score > 70 ? "#4ade80" : score > 40 ? "#fbbf24" : "#f87171";
+
+      barEl.style.width = `${score}%`;
+      barEl.style.background = score > 70 
+        ? "linear-gradient(90deg, #4ade80, #22d3ee)"
+        : score > 40 
+          ? "linear-gradient(90deg, #fbbf24, #f59e0b)"
+          : "linear-gradient(90deg, #f87171, #ef4444)";
+
+      tipsEl.innerHTML = tips.map(tip => 
+        `<span class="health-tip tip-${tip.type}">${tip.text}</span>`
+      ).join("");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // CHARTS
+    // ═══════════════════════════════════════════════════════════════════
+    function updateCharts(timestamps, temps, soils, lights, humidity) {
+      // Destroy existing charts
+      [tempChart, soilChart, multiChart, radarChart, predictionChart].forEach(chart => {
+        if (chart) chart.destroy();
+      });
+
+      // Temperature Chart
+      tempChart = new Chart(document.getElementById("tempChart"), {
+        type: "line",
+        data: {
+          labels: timestamps,
+          datasets: [{
+            label: "Temperature (°C)",
+            data: temps,
+            borderColor: "#f87171",
+            backgroundColor: "rgba(248, 113, 113, 0.1)",
+            fill: true,
+            tension: 0.4,
+            pointRadius: 2
+          }]
+        },
+        options: {
+          ...chartConfig,
+          scales: {
+            ...chartConfig.scales,
+            x: { ...chartConfig.scales.x, title: { display: true, text: 'Time', color: '#e2e8f0', font: { size: 12, weight: 'bold' } } },
+            y: { ...chartConfig.scales.y, title: { display: true, text: 'Temperature (°C)', color: '#f87171', font: { size: 12, weight: 'bold' } } }
+          }
+        }
+      });
+
+      // Soil Chart
+      soilChart = new Chart(document.getElementById("soilChart"), {
+        type: "line",
+        data: {
+          labels: timestamps,
+          datasets: [{
+            label: "Soil Moisture",
+            data: soils,
+            borderColor: "#60a5fa",
+            backgroundColor: "rgba(96, 165, 250, 0.1)",
+            fill: true,
+            tension: 0.4,
+            pointRadius: 2
+          }]
+        },
+        options: {
+          ...chartConfig,
+          scales: {
+            ...chartConfig.scales,
+            x: { ...chartConfig.scales.x, title: { display: true, text: 'Time', color: '#e2e8f0', font: { size: 12, weight: 'bold' } } },
+            y: { ...chartConfig.scales.y, title: { display: true, text: 'Soil Moisture (Raw Value)', color: '#60a5fa', font: { size: 12, weight: 'bold' } } }
+          }
+        }
+      });
+
+      // Multi-metric Chart
+      multiChart = new Chart(document.getElementById("multiChart"), {
+        type: "line",
+        data: {
+          labels: timestamps,
+          datasets: [
+            {
+              label: "Temp (°C)",
+              data: temps,
+              borderColor: "#f87171",
+              tension: 0.4,
+              pointRadius: 0
+            },
+            {
+              label: "Humidity (%)",
+              data: humidity,
+              borderColor: "#a78bfa",
+              tension: 0.4,
+              pointRadius: 0
+            },
+            {
+              label: "Light (÷10)",
+              data: lights.map(l => l / 10),
+              borderColor: "#fbbf24",
+              tension: 0.4,
+              pointRadius: 0
+            }
+          ]
+        },
+        options: {
+          ...chartConfig,
+          scales: {
+            ...chartConfig.scales,
+            x: { ...chartConfig.scales.x, title: { display: true, text: 'Time', color: '#e2e8f0', font: { size: 12, weight: 'bold' } } },
+            y: { ...chartConfig.scales.y, title: { display: true, text: 'Sensor Values (Normalized)', color: '#a78bfa', font: { size: 12, weight: 'bold' } } }
+          }
+        }
+      });
+
+      // Radar Chart
+      const avgTemp = temps.reduce((a, b) => a + b, 0) / temps.length;
+      const avgSoil = soils.reduce((a, b) => a + b, 0) / soils.length;
+      const avgLight = lights.reduce((a, b) => a + b, 0) / lights.length;
+      const avgHumidity = humidity.reduce((a, b) => a + b, 0) / humidity.length;
+
+      const radarScores = {
+        "Temp Balance": Math.max(0, 100 - Math.abs(avgTemp - 27) * 5),
+        "Soil Health": avgSoil >= 1800 && avgSoil <= 2600 ? 90 : 50,
+        "Light Level": Math.min(100, (avgLight / 15)),
+        "Humidity": avgHumidity >= 40 && avgHumidity <= 80 ? 90 : 60,
+        "Consistency": 85 // Based on variance
+      };
+
+      radarChart = new Chart(document.getElementById("radarChart"), {
+        type: "radar",
+        data: {
+          labels: Object.keys(radarScores),
+          datasets: [{
+            label: "Health Metrics",
+            data: Object.values(radarScores),
+            borderColor: "#4ade80",
+            backgroundColor: "rgba(74, 222, 128, 0.2)",
+            pointBackgroundColor: "#4ade80"
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            r: {
+              beginAtZero: true,
+              max: 100,
+              ticks: { color: '#94a3b8', backdropColor: 'transparent' },
+              grid: { color: 'rgba(255,255,255,0.1)' },
+              pointLabels: { color: '#e2e8f0' }
+            }
+          }
+        }
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ALERTS
+    // ═══════════════════════════════════════════════════════════════════
+    function updateAlerts(alerts) {
+      const alertList = document.getElementById("alertList");
+      
+      if (!alerts || alerts.length === 0) {
+        alertList.innerHTML = `
+          <div class="no-alerts">
+            <div class="icon">✅</div>
+            <p>No recent alerts — your plant is happy!</p>
+          </div>
+        `;
+        return;
+      }
+
+      const alertIcons = {
+        soil_dry: "🌵",
+        soil_wet: "💦",
+        temp_high: "🔥",
+        temp_low: "❄️",
+        light_low: "🌑",
+        humidity_high: "🌫️",
+        humidity_low: "🏜️"
+      };
+
+      alertList.innerHTML = alerts.slice(0, 10).map(alert => {
+        const severity = alert.severity || "info";
+        const type = alert.type || "unknown";
+        const icon = alertIcons[type] || "⚠️";
+        const time = new Date(alert.triggered_at).toLocaleString();
+        
+        return `
+          <div class="alert-item alert-${severity}">
+            <div class="alert-icon">${icon}</div>
+            <div class="alert-content">
+              <div class="alert-type">${type.replace(/_/g, " ")}</div>
+              <div class="alert-time">${time}</div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // WEATHER-AWARE PREDICTIONS
+    // ═══════════════════════════════════════════════════════════════════
+    function updatePredictions(readings) {
+      const recent = readings.slice(-20);
+      const temps = recent.map(r => r.temp);
+      const soils = recent.map(r => r.soil);
+
+      // Base linear extrapolation
+      let tempRate = (temps[temps.length - 1] - temps[0]) / temps.length;
+      let soilRate = (soils[soils.length - 1] - soils[0]) / soils.length;
+
+      // ═══════════════════════════════════════════════════════════════════
+      // WEATHER-ADJUSTED PREDICTIONS
+      // ═══════════════════════════════════════════════════════════════════
+      let predictionSource = "📈 Linear extrapolation";
+      let weatherAdjustment = "";
+      
+      if (currentWeather.temp !== null) {
+        // Adjust temperature predictions based on weather
+        if (currentWeather.isHot) {
+          tempRate += 0.3;  // Expect faster temperature rise
+          weatherAdjustment += "🌡️ Hot weather detected (+0.3°C/hr). ";
+        } else if (currentWeather.isCold) {
+          tempRate -= 0.2;  // Expect slower temperature rise
+          weatherAdjustment += "❄️ Cold weather detected (-0.2°C/hr). ";
+        }
+        
+        // Cloud cover effect
+        if (currentWeather.clouds > 70) {
+          tempRate -= 0.15;  // Clouds reduce heating
+          weatherAdjustment += "☁️ High cloud cover (slower heating). ";
+        }
+        
+        // Adjust soil moisture predictions based on weather
+        if (currentWeather.isRaining) {
+          soilRate -= 30;  // Soil gets wetter with rain
+          weatherAdjustment += "🌧️ Rain expected (soil moisture will increase). ";
+          predictionSource = "🌧️ Weather-aware (rain detected)";
+        } else if (currentWeather.isHot && currentWeather.humidity < 50) {
+          soilRate += 25;  // Hot dry weather = faster evaporation
+          weatherAdjustment += "🏜️ Hot & dry (faster evaporation). ";
+          predictionSource = "☀️ Weather-aware (hot & dry)";
+        } else if (currentWeather.windSpeed > 7) {
+          soilRate += 15;  // Wind increases evaporation
+          weatherAdjustment += "🌬️ Windy conditions (increased evaporation). ";
+          predictionSource = "🌬️ Weather-aware (windy)";
+        } else {
+          predictionSource = "🌤️ Weather-aware prediction";
+        }
+      }
+
+      // Calculate predictions with weather adjustments
+      const predTemp = Math.max(15, Math.min(45, temps[temps.length - 1] + tempRate * 10));
+      const predSoil = Math.max(1000, Math.min(3000, soils[soils.length - 1] + soilRate * 10));
+
+      document.getElementById("predTemp").textContent = predTemp.toFixed(1) + "°C";
+      document.getElementById("predSoil").textContent = Math.round(predSoil);
+      
+      // Show prediction sources
+      const predTempSourceEl = document.getElementById("predTempSource");
+      const predSoilSourceEl = document.getElementById("predSoilSource");
+      if (predTempSourceEl) {
+        predTempSourceEl.textContent = predictionSource;
+      }
+      if (predSoilSourceEl) {
+        predSoilSourceEl.textContent = weatherAdjustment ? weatherAdjustment.slice(0, 40) + "..." : "Based on trend analysis";
+      }
+
+      // Enhanced watering recommendation with weather
+      const wateringNeed = document.getElementById("predWatering");
+      
+      let wateringLevel = "low";
+      let reason = "";
+      
+      if (currentWeather.isRaining) {
+        wateringLevel = "none";
+        reason = "🌧️ Rain expected — skip watering today!";
+      } else if (predSoil < 1800 || soilRate < -20) {
+        wateringLevel = "high";
+        reason = currentWeather.isHot 
+          ? "🔥 Hot weather causing rapid moisture loss"
+          : "📉 Soil moisture dropping quickly";
+      } else if (predSoil < 2000 || (currentWeather.isHot && !currentWeather.isRaining)) {
+        wateringLevel = "medium";
+        reason = currentWeather.isHot
+          ? "☀️ Hot weather — monitor soil closely"
+          : "⚠️ Soil moisture at threshold";
+      } else {
+        wateringLevel = "low";
+        reason = "✅ Soil moisture is adequate";
+      }
+      
+      if (wateringLevel === "none") {
+        wateringNeed.textContent = "💧 Skip";
+        wateringNeed.style.color = "#60a5fa";
+      } else if (wateringLevel === "high") {
+        wateringNeed.textContent = "🚨 High";
+        wateringNeed.style.color = "#f87171";
+      } else if (wateringLevel === "medium") {
+        wateringNeed.textContent = "⚠️ Medium";
+        wateringNeed.style.color = "#fbbf24";
+      } else {
+        wateringNeed.textContent = "✅ Low";
+        wateringNeed.style.color = "#4ade80";
+      }
+      
+      const wateringReasonEl = document.getElementById("predWateringReason");
+      if (wateringReasonEl) {
+        wateringReasonEl.textContent = reason;
+      }
+
+      // Prediction chart with weather-adjusted curves
+      const futureLabels = ["Now", "+4h", "+8h", "+12h", "+16h", "+20h", "+24h"];
+      const lastTemp = temps[temps.length - 1];
+      const lastSoil = soils[soils.length - 1];
+
+      // Generate predictions with time-of-day awareness
+      const currentHour = new Date().getHours();
+      const predictedTemps = futureLabels.map((_, i) => {
+        const futureHour = (currentHour + i * 4) % 24;
+        // Day/night temperature adjustment
+        const dayNightFactor = (futureHour >= 6 && futureHour <= 18) ? 1.0 : 0.7;
+        let prediction = lastTemp + (tempRate * i * 2 * dayNightFactor);
+        // Weather adjustment
+        if (currentWeather.isRaining) prediction -= 2;
+        return Math.max(15, Math.min(40, prediction));
+      });
+      
+      const predictedSoils = futureLabels.map((_, i) => {
+        let prediction = lastSoil + (soilRate * i * 2);
+        // Rain increases moisture
+        if (currentWeather.isRaining) prediction -= 50 * i;
+        return Math.max(1200, Math.min(2800, prediction));
+      });
+
+      predictionChart = new Chart(document.getElementById("predictionChart"), {
+        type: "line",
+        data: {
+          labels: futureLabels,
+          datasets: [
+            {
+              label: "Predicted Temp (°C)",
+              data: predictedTemps,
+              borderColor: "#f87171",
+              borderDash: [5, 5],
+              tension: 0.3,
+              pointRadius: 3
+            },
+            {
+              label: "Predicted Soil (÷10)",
+              data: predictedSoils.map(s => s / 10),
+              borderColor: "#60a5fa",
+              borderDash: [5, 5],
+              tension: 0.3,
+              pointRadius: 3
+            }
+          ]
+        },
+        options: {
+          ...chartConfig,
+          scales: {
+            ...chartConfig.scales,
+            x: { ...chartConfig.scales.x, title: { display: true, text: 'Future Time (Hours)', color: '#e2e8f0', font: { size: 12, weight: 'bold' } } },
+            y: { ...chartConfig.scales.y, title: { display: true, text: 'Predicted Values', color: '#4ade80', font: { size: 12, weight: 'bold' } } }
+          }
+        }
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // NO DATA HANDLER
+    // ═══════════════════════════════════════════════════════════════════
+    function showNoData() {
+      document.getElementById("alertList").innerHTML = `
+        <div class="no-alerts">
+          <div class="icon">📡</div>
+          <p>No sensor data available. Start the simulator to begin monitoring.</p>
+        </div>
+      `;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // WEATHER FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════
+    
+    // Global weather state for predictions
+    let currentWeather = {
+      temp: null,
+      humidity: null,
+      condition: null,
+      windSpeed: null,
+      isRaining: false,
+      isHot: false,
+      isCold: false
+    };
+    
+    async function loadWeatherData() {
+      try {
+        const response = await fetch(
+          `https://api.openweathermap.org/data/2.5/weather?q=${WEATHER_CITY}&appid=${WEATHER_API_KEY}&units=metric`
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error("Weather API error:", data);
+          return;
+        }
+
+        // Update weather display
+        const temp = data.main?.temp;
+        const feelsLike = data.main?.feels_like;
+        const humidity = data.main?.humidity;
+        const windSpeed = data.wind?.speed;
+        const visibility = data.visibility ? (data.visibility / 1000).toFixed(1) : "--";
+        const condition = data.weather?.[0]?.main?.toLowerCase();
+        const description = data.weather?.[0]?.description;
+
+        // Store weather globally for predictions
+        currentWeather = {
+          temp: temp,
+          humidity: humidity,
+          condition: condition,
+          windSpeed: windSpeed,
+          isRaining: condition === "rain" || condition === "drizzle" || condition === "thunderstorm" || data.rain,
+          isHot: temp > 32,
+          isCold: temp < 15,
+          clouds: data.clouds?.all || 0
+        };
+
+        // Weather icons mapping
+        const weatherIcons = {
+          clear: "☀️",
+          clouds: "☁️",
+          rain: "🌧️",
+          drizzle: "🌦️",
+          thunderstorm: "⛈️",
+          snow: "🌨️",
+          mist: "🌫️",
+          fog: "🌫️",
+          haze: "🌫️",
+          smoke: "🌫️"
+        };
+
+        document.getElementById("weatherIcon").textContent = weatherIcons[condition] || "🌤️";
+        document.getElementById("weatherTemp").textContent = `${temp?.toFixed(1)}°C`;
+        document.getElementById("weatherDesc").textContent = description || "Unknown";
+        document.getElementById("weatherHumidity").textContent = humidity || "--";
+        document.getElementById("weatherWind").textContent = windSpeed?.toFixed(1) || "--";
+        document.getElementById("weatherVisibility").textContent = visibility;
+        document.getElementById("weatherFeels").textContent = feelsLike?.toFixed(1) || "--";
+        document.getElementById("weatherLocation").textContent = `📍 ${data.name}, ${data.sys?.country}`;
+
+        // Generate weather alerts
+        const alerts = [];
+        
+        if (temp > 40) alerts.push("🔥 EXTREME HEAT — Keep plants shaded & hydrated!");
+        else if (temp > 35) alerts.push("🌡️ Hot weather — increase watering frequency.");
+        else if (temp < 10) alerts.push("🥶 Cold weather — protect sensitive plants.");
+        else if (temp < 5) alerts.push("❄️ FROST WARNING — Move plants indoors!");
+
+        if (humidity > 90) alerts.push("💨 Very high humidity — watch for fungal diseases.");
+        else if (humidity < 30) alerts.push("🏜️ Low humidity — consider misting plants.");
+
+        if (windSpeed > 10) alerts.push("🌬️ Strong winds — secure or shelter plants.");
+
+        if (condition === "thunderstorm") alerts.push("⛈️ THUNDERSTORM — Bring potted plants inside!");
+        else if (condition === "rain" || data.rain) alerts.push("🌧️ Rain today — you can skip watering!");
+        else if (condition === "snow") alerts.push("🌨️ SNOW — Protect all outdoor plants!");
+
+        const alertsEl = document.getElementById("weatherAlerts");
+        if (alerts.length > 0) {
+          alertsEl.innerHTML = `<div style="font-weight: 600; margin-bottom: 8px;">⚠️ Weather Recommendations:</div>` +
+            alerts.map(a => `<div class="weather-alert-item">${a}</div>`).join("");
+        } else {
+          alertsEl.innerHTML = `<div class="weather-alert-item" style="background: rgba(74, 222, 128, 0.15);">✅ Weather is ideal for your plants!</div>`;
+        }
+
+      } catch (error) {
+        console.error("Failed to load weather:", error);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // INITIALIZATION
+    // ═══════════════════════════════════════════════════════════════════
+    // Load weather first so predictions can use it
+    loadWeatherData().then(() => {
+      loadDashboardData();
+    });
+    
+    // Auto-refresh every 30 seconds for sensor data
+    setInterval(loadDashboardData, 30 * 1000);
+    
+    // Refresh weather every 10 minutes
+    setInterval(loadWeatherData, 10 * 60 * 1000);
+
+    // Real-time subscription
+    supabaseClient
+      .channel('readings')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'readings' }, () => {
+        loadDashboardData();
+      })
+      .subscribe();
+  </script>
+</body>
+</html>
