@@ -688,9 +688,9 @@
     // ═══════════════════════════════════════════════════════════════════
     // SUPABASE CLIENT
     // ═══════════════════════════════════════════════════════════════════
-    const SUPABASE_URL = "https://yhgyeaygmampbvfanumx.supabase.co";
-    // Using service role key to bypass RLS for dashboard reads
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InloZ3llYXlnbWFtcGJ2ZmFudW14Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzQ1OTc1MCwiZXhwIjoyMDgzMDM1NzUwfQ.76utBDw7G3jkYbTN51cZ7z39DBFYAMcNzpq6ct_YLXM";
+    const SUPABASE_URL = CONFIG.SUPABASE_URL;
+    // Using secret key to bypass RLS for dashboard reads
+    const SUPABASE_KEY = CONFIG.SUPABASE_SECRET_KEY;
     
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
