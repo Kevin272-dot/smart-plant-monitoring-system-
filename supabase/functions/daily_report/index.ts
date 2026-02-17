@@ -6,7 +6,9 @@
  */
 
 /// <reference lib="deno.window" />
+// deno-lint-ignore no-import-prefix
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
+// deno-lint-ignore no-import-prefix
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ═══════════════════════════════════════════════════════════════════

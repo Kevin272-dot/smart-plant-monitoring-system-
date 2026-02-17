@@ -1,0 +1,1028 @@
+// deno-lint-ignore-file no-explicit-any no-unused-vars ban-unused-ignore jsx-button-has-type
+// deno-lint-ignore-file
+import { useState, useEffect, useMemo } from "react";
+import { Line as ChartLine, Radar } from "react-chartjs-2";
+import { createClient } from "@supabase/supabase-js";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  BarElement,
+  RadialLinearScale,
+  ArcElement,
+} from "chart.js";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  RadialLinearScale,
+  BarElement,
+  ArcElement,
+  Tooltip,
+  Legend,
+  Title
+);
+
+
+// Configuration is read from Vite environment variables. Create a .env file with VITE_ prefixed keys.
+// Example keys are provided in `.env.example` (do NOT commit your real `.env`).
+const SUPABASE_URL = (import.meta as any)?.env?.VITE_SUPABASE_URL || '';
+const SUPABASE_KEY = (import.meta as any)?.env?.VITE_SUPABASE_KEY || '';
+const WEATHER_API_KEY = (import.meta as any)?.env?.VITE_WEATHER_API_KEY || '';
+const WEATHER_CITY = (import.meta as any)?.env?.VITE_WEATHER_CITY || 'Chennai';
+
+// Detect local alerts based on sensor readings
+function detectLocalAlerts(readings: any[]) {
+  if (!readings || readings.length === 0) return [];
+  const alerts = [];
+  const last = readings[readings.length - 1];
+  const ts = new Date(last.timestamp).toISOString();
+  if (last.soil < 1800) {
+    alerts.push({
+      type: "soil_dry",
+      severity: "critical",
+      triggered_at: ts,
+      message: "Soil moisture is too low."
+    });
+  } else if (last.soil > 2600) {
+    alerts.push({
+      type: "soil_wet",
+      severity: "warning",
+      triggered_at: ts,
+      message: "Soil moisture is too high."
+    });
+  }
+  if (last.temp > 35) {
+    alerts.push({
+      type: "temp_high",
+      severity: "critical",
+      triggered_at: ts,
+      message: "Temperature is too high."
+    });
+  } else if (last.temp < 18) {
+    alerts.push({
+      type: "temp_low",
+      severity: "warning",
+      triggered_at: ts,
+      message: "Temperature is too low."
+    });
+  }
+  if (last.light < 500) {
+    alerts.push({
+      type: "light_low",
+      severity: "warning",
+      triggered_at: ts,
+      message: "Light intensity is too low."
+    });
+  }
+  if (last.humidity > 85) {
+    alerts.push({
+      type: "humidity_high",
+      severity: "warning",
+      triggered_at: ts,
+      message: "Humidity is too high."
+    });
+  } else if (last.humidity < 40) {
+    alerts.push({
+      type: "humidity_low",
+      severity: "warning",
+      triggered_at: ts,
+      message: "Humidity is too low."
+    });
+  }
+  return alerts;
+}
+
+const Dashboard = () => {
+  const supabase = useMemo(() => createClient(SUPABASE_URL, SUPABASE_KEY), []);
+
+  // Manual refresh helper for debugging (forces a fetch and logs results)
+  const manualRefresh = async () => {
+    try {
+      console.log('[ManualRefresh] fetching readings...');
+      const { data, error } = await supabase
+        .from('readings')
+        .select('timestamp,temp,soil,light,humidity')
+        .order('timestamp', { ascending: false })
+        .limit(48);
+      console.log('[ManualRefresh] readings result:', { data, error });
+      if (!error && data) setSensorReadings(data.slice().reverse());
+
+      console.log('[ManualRefresh] fetching alerts...');
+      const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: alertData, error: alertError } = await supabase
+        .from('alerts')
+        .select('*')
+        .gte('triggered_at', since7d)
+        .order('triggered_at', { ascending: false });
+      console.log('[ManualRefresh] alerts result:', { alertData, alertError });
+      if (!alertError && alertData) setAlerts(alertData);
+    } catch (e) {
+      console.error('[ManualRefresh] failed', e);
+    }
+  };
+
+  // deno-lint-ignore ban-unused-ignore
+  // deno-lint-ignore ban-unused-ignore
+  // deno-lint-ignore no-explicit-any
+  const [sensorReadings, setSensorReadings] = useState<any[]>([]);
+    // ML Pattern Analysis state
+    const [mlTrend, setMlTrend] = useState<string>("--");
+    const [mlTrendDesc, setMlTrendDesc] = useState<string>("Analyzing patterns...");
+    const [mlCycle, setMlCycle] = useState<string>("--");
+    const [mlCycleDesc, setMlCycleDesc] = useState<string>("Learning cycles...");
+    const [mlAnomaly, setMlAnomaly] = useState<string>("--");
+    const [mlAnomalyDesc, setMlAnomalyDesc] = useState<string>("Checking anomalies...");
+    const [mlConfidence, setMlConfidence] = useState<string>("--");
+    const [mlConfidenceFill, setMlConfidenceFill] = useState<number>(0);
+    const [mlInsights, setMlInsights] = useState<Array<{icon: string, text: string, confidence: number}>>([{icon: "⏳", text: "Collecting data for analysis...", confidence: 0}]);
+    // ML Pattern Analysis helpers
+    function calculateStdDev(arr: number[]) {
+      const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+      const squareDiffs = arr.map(value => Math.pow(value - mean, 2));
+      return Math.sqrt(squareDiffs.reduce((a, b) => a + b, 0) / arr.length);
+    }
+
+    function detectTrend(values: number[]) {
+      const n = values.length;
+      if (n < 3) return { slope: 0, direction: 'insufficient_data' };
+      let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+      for (let i = 0; i < n; i++) {
+        sumX += i;
+        sumY += values[i];
+        sumXY += i * values[i];
+        sumX2 += i * i;
+      }
+      const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+      const direction = slope > 0.5 ? 'rising' : slope < -0.5 ? 'falling' : 'stable';
+      return { slope, direction };
+    }
+
+    function detectDailyCycle(readings: any[]) {
+      if (readings.length < 10) return { detected: false, pattern: 'insufficient_data' };
+      const hourlyData: Record<number, number[]> = {};
+      readings.forEach(r => {
+        const hour = new Date(r.timestamp).getHours();
+        if (!hourlyData[hour]) hourlyData[hour] = [];
+        hourlyData[hour].push(r.temp);
+      });
+      const hourlyAvg = Object.entries(hourlyData).map(([hour, temps]) => ({
+        hour: parseInt(hour),
+        avgTemp: temps.reduce((a, b) => a + b, 0) / temps.length
+      }));
+      if (hourlyAvg.length < 4) return { detected: false, pattern: 'insufficient_data' };
+      const temps = hourlyAvg.map(h => h.avgTemp);
+      const variation = Math.max(...temps) - Math.min(...temps);
+      return {
+        detected: variation > 3,
+        pattern: variation > 5 ? 'strong_cycle' : variation > 3 ? 'moderate_cycle' : 'weak_cycle',
+        variation: variation.toFixed(1),
+        peakHour: hourlyAvg.reduce((a, b) => a.avgTemp > b.avgTemp ? a : b).hour,
+        lowHour: hourlyAvg.reduce((a, b) => a.avgTemp < b.avgTemp ? a : b).hour
+      };
+    }
+
+    function calculateAnomalyScore(values: number[], latestValue: number) {
+      if (values.length < 5) return { score: 0, isAnomaly: false };
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      const stdDev = calculateStdDev(values);
+      if (stdDev === 0) return { score: 0, isAnomaly: false };
+      const zScore = Math.abs((latestValue - mean) / stdDev);
+      return {
+        score: Math.min(100, zScore * 33).toFixed(0),
+        isAnomaly: zScore > 2,
+        zScore: zScore.toFixed(2)
+      };
+    }
+
+    function generateMLInsights(readings: any[], trend: any, cycle: any, anomaly: any, weather: any) {
+      const insights = [];
+      const latest = readings[readings.length - 1];
+      if (trend.direction === 'falling' && latest.soil < 2000) {
+        insights.push({ icon: '💧', text: 'Soil moisture is declining. Based on the trend, watering may be needed in 4-6 hours.', confidence: 85 });
+      }
+      if (trend.direction === 'rising' && latest.temp > 30) {
+        insights.push({ icon: '🌡️', text: 'Temperature is rising. Consider moving plant to shade or increasing ventilation.', confidence: 78 });
+      }
+      if (weather) {
+        if (weather.rain || weather.condition?.includes('rain')) {
+          insights.push({ icon: '🌧️', text: 'Rain detected/expected. Skip watering - soil moisture will naturally increase.', confidence: 92 });
+        }
+        if (weather.temp > 35) {
+          insights.push({ icon: '☀️', text: 'High outdoor temperature. Expect faster soil moisture evaporation.', confidence: 88 });
+        }
+        if (weather.humidity > 80) {
+          insights.push({ icon: '💨', text: 'High humidity detected. Reduce watering frequency to prevent root issues.', confidence: 82 });
+        }
+      }
+      if (cycle.detected) {
+        insights.push({ icon: '🔄', text: `Daily pattern detected: Temperature peaks around ${cycle.peakHour}:00 and dips around ${cycle.lowHour}:00.`, confidence: 75 });
+      }
+      if (anomaly.isAnomaly) {
+        insights.push({ icon: '⚠️', text: 'Unusual reading detected! Current values deviate significantly from normal patterns.', confidence: 90 });
+      }
+      if (latest.soil >= 2000 && latest.soil <= 2400 && latest.temp >= 24 && latest.temp <= 30) {
+        insights.push({ icon: '✅', text: 'Current conditions are optimal. Plant is in ideal environment based on historical patterns.', confidence: 95 });
+      }
+      if (readings.length >= 20) {
+        const soilTrend = detectTrend(readings.slice(-20).map(r => r.soil));
+        if (soilTrend.slope < -5) {
+          const hoursUntilDry = Math.abs((latest.soil - 1800) / (soilTrend.slope * 4));
+          if (hoursUntilDry < 24) {
+            insights.push({ icon: '⏰', text: `ML predicts soil will reach critical dryness in ~${hoursUntilDry.toFixed(0)} hours.`, confidence: 70 });
+          }
+        }
+      }
+      return insights.length > 0 ? insights : [{ icon: '📊', text: 'Collecting more data to improve predictions. Keep the sensors running for better analysis.', confidence: 50 }];
+    }
+  // deno-lint-ignore no-explicit-any
+  const [tempData, setTempData] = useState<any>(null);
+  // deno-lint-ignore no-explicit-any
+  const [soilData, setSoilData] = useState<any>(null);
+  const [currentTemp, setCurrentTemp] = useState<string>("--");
+  const [currentSoil, setCurrentSoil] = useState<string>("--");
+  const [currentLight, setCurrentLight] = useState<string>("--");
+  const [currentHumidity, setCurrentHumidity] = useState<string>("--");
+  const [multiChartData, setMultiChartData] = useState<any>(null);
+  const [radarData, setRadarData] = useState<any>(null);
+      // Radar chart update
+      useEffect(() => {
+        if (!sensorReadings || sensorReadings.length === 0) {
+          setRadarData(null);
+          return;
+        }
+        const temps = sensorReadings.map((r: any) => r.temp);
+        const soils = sensorReadings.map((r: any) => r.soil);
+        const lights = sensorReadings.map((r: any) => r.light ?? 0);
+        const humidity = sensorReadings.map((r: any) => r.humidity);
+        const avgTemp = temps.reduce((a: number, b: number) => a + b, 0) / temps.length;
+        const avgSoil = soils.reduce((a: number, b: number) => a + b, 0) / soils.length;
+        const avgLight = lights.reduce((a: number, b: number) => a + b, 0) / lights.length;
+        const avgHumidity = humidity.reduce((a: number, b: number) => a + b, 0) / humidity.length;
+        const radarScores = {
+          "Temp Balance": Math.max(0, 100 - Math.abs(avgTemp - 27) * 5),
+          "Soil Health": avgSoil >= 1800 && avgSoil <= 2600 ? 90 : 50,
+          "Light Level": Math.min(100, (avgLight / 15)),
+          "Humidity": avgHumidity >= 40 && avgHumidity <= 80 ? 90 : 60,
+          "Consistency": 85 // Based on variance
+        };
+        setRadarData({
+          labels: Object.keys(radarScores),
+          datasets: [{
+            label: "Health Metrics",
+            data: Object.values(radarScores),
+            borderColor: "#4ade80",
+            backgroundColor: "rgba(74, 222, 128, 0.2)",
+            pointBackgroundColor: "#4ade80"
+          }]
+        });
+        console.log('[Dashboard] radarData updated', { radarScores });
+      }, [sensorReadings]);
+    // Multi-metric chart update
+    useEffect(() => {
+      if (!sensorReadings || sensorReadings.length === 0) {
+        setMultiChartData(null);
+        return;
+      }
+      const labels = sensorReadings.map((r: any) => new Date(r.timestamp).toLocaleTimeString());
+      const temps = sensorReadings.map((r: any) => r.temp);
+      const humidity = sensorReadings.map((r: any) => r.humidity);
+      const lights = sensorReadings.map((r: any) => r.light ?? 0);
+      setMultiChartData({
+        labels,
+        datasets: [
+          {
+            label: "Temp (°C)",
+            data: temps,
+            borderColor: "#f87171",
+            tension: 0.4,
+            pointRadius: 0
+          },
+          {
+            label: "Humidity (%)",
+            data: humidity,
+            borderColor: "#a78bfa",
+            tension: 0.4,
+            pointRadius: 0
+          },
+          {
+            label: "Light (÷10)",
+            data: lights.map((l: number) => l / 10),
+            borderColor: "#fbbf24",
+            tension: 0.4,
+            pointRadius: 0
+          }
+        ]
+      });
+      console.log('[Dashboard] multiChartData updated', { labels, temps, humidity, lights });
+    }, [sensorReadings]);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<string>("--");
+  const [trendBadges, setTrendBadges] = useState<{[k: string]: {text: string, className: string}}>({ temp: {text: "--", className: "trend trend-stable"}, soil: {text: "--", className: "trend trend-stable"}, light: {text: "--", className: "trend trend-stable"}, humidity: {text: "--", className: "trend trend-stable"} });
+  const [healthScore, setHealthScore] = useState<string>("--");
+  const [healthBarFill, setHealthBarFill] = useState<string>("0%");
+  const [healthBarColor, setHealthBarColor] = useState<string>("linear-gradient(90deg, #4ade80, #22d3ee)");
+  const [healthTips, setHealthTips] = useState<Array<{text: string, type: string}>>([]);
+  const [weather, setWeather] = useState<any>(null);
+  const [alerts, setAlerts] = useState<any[]>([]);
+
+  // Prediction states
+  const [predTemp, setPredTemp] = useState<string>("--");
+  const [predTempSource, setPredTempSource] = useState<string>("--");
+  const [predSoil, setPredSoil] = useState<string>("--");
+  const [predSoilSource, setPredSoilSource] = useState<string>("--");
+  const [predWatering, setPredWatering] = useState<string>("--");
+  const [predWateringReason, setPredWateringReason] = useState<string>("--");
+  const [predictionChartData, setPredictionChartData] = useState<any>(null);
+
+  // Define a type for sensor readings
+  type SensorReading = {
+    timestamp: any;
+    temp: number;
+    soil: number;
+    light: number;
+    humidity: number;
+  };
+  
+    useEffect(() => {
+      const POLL_INTERVAL_MS = 30000;
+      const fetchData = async () => {
+        setError(null);
+        // Supabase
+        console.log('[Dashboard] fetching readings from supabase...');
+        const { data, error: fetchError } = await supabase
+          .from("readings")
+          .select("timestamp,temp,soil,light,humidity")
+          .order("timestamp", { ascending: false })
+          .limit(48);
+        console.log('[Dashboard] supabase.readings response:', { data, fetchError });
+        if (fetchError) {
+          console.error('[Dashboard] Supabase fetch error:', fetchError);
+          setError(fetchError.message);
+        } else if (data && data.length > 0) {
+          console.log('[Dashboard] readings count:', data.length, 'first:', data[0], 'last:', data[data.length - 1]);
+          // data is returned newest-first; create an ascending copy (oldest->newest) for UI
+          const asc = data.slice().reverse();
+          setSensorReadings(asc);
+          const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          let { data: alertData, error: alertError } = await supabase
+            .from("alerts")
+            .select("*")
+            .gte("triggered_at", since7d)
+            .order("triggered_at", { ascending: false });
+          console.log('[Dashboard] supabase.alerts (past 7d) response:', { alertData, alertError });
+          // If nothing returned (maybe timestamps mismatched), fetch latest 50 alerts without time filter
+          if ((!alertData || alertData.length === 0) && !alertError) {
+            const res = await supabase.from('alerts').select('*').order('triggered_at', { ascending: false }).limit(50);
+            alertData = res.data;
+            alertError = res.error;
+            console.log('[Dashboard] supabase.alerts (latest 50) fallback response:', { alertData, alertError });
+          }
+          if (!alertError && alertData && alertData.length > 0) {
+            setAlerts(alertData);
+            console.log('[Dashboard] setAlerts count:', alertData.length);
+          }
+
+          const latest = asc[asc.length - 1];
+            setCurrentTemp(latest.temp.toFixed(1));
+            setCurrentSoil(latest.soil.toString());
+            setCurrentLight(latest.light.toString());
+            setCurrentHumidity(latest.humidity.toFixed(1));
+
+            const newBadges: {[k: string]: {text: string, className: string}} = {};
+            ['temp', 'soil', 'light', 'humidity'].forEach((field) => {
+              const values = asc.map((r: any) => r[field]);
+              const midpoint = Math.floor(values.length / 2);
+              const firstHalf = values.slice(0, midpoint);
+              const secondHalf = values.slice(midpoint);
+              const avgFirst = firstHalf.reduce((a: number, b: number) => a + b, 0) / firstHalf.length;
+              const avgSecond = secondHalf.reduce((a: number, b: number) => a + b, 0) / secondHalf.length;
+              const diff = avgSecond - avgFirst;
+              const threshold = avgFirst * 0.03;
+              if (diff > threshold) newBadges[field] = { text: "📈 Rising", className: "trend trend-up" };
+              else if (diff < -threshold) newBadges[field] = { text: "📉 Falling", className: "trend trend-down" };
+              else newBadges[field] = { text: "➡️ Stable", className: "trend trend-stable" };
+            });
+            setTrendBadges(newBadges);
+
+            let score = 100;
+            const tips: Array<{text: string, type: string}> = [];
+            if (latest.soil < 1800) { score -= 30; tips.push({ text: "🚨 Water your plant!", type: "critical" }); }
+            else if (latest.soil > 2600) { score -= 20; tips.push({ text: "💦 Reduce watering", type: "warning" }); }
+            else { tips.push({ text: "💧 Soil moisture optimal", type: "good" }); }
+            if (latest.temp > 35) { score -= 25; tips.push({ text: "🔥 Too hot!", type: "critical" }); }
+            else if (latest.temp < 18) { score -= 20; tips.push({ text: "❄️ Too cold!", type: "warning" }); }
+            else { tips.push({ text: "🌡️ Temperature ideal", type: "good" }); }
+            if (latest.light < 500) { score -= 15; tips.push({ text: "🌑 More light needed", type: "warning" }); }
+            else if (latest.light > 1600) { score -= 10; tips.push({ text: "☀️ Very bright", type: "warning" }); }
+            if (latest.humidity > 85) { score -= 15; tips.push({ text: "🌫️ High humidity", type: "warning" }); }
+            else if (latest.humidity < 40) { score -= 10; tips.push({ text: "🏜️ Low humidity", type: "warning" }); }
+            score = Math.max(0, score);
+            setHealthScore(`${score}%`);
+            setHealthBarFill(`${score}%`);
+            setHealthBarColor(score > 70 ? "linear-gradient(90deg, #4ade80, #22d3ee)" : score > 40 ? "linear-gradient(90deg, #fbbf24, #f59e0b)" : "linear-gradient(90deg, #f87171, #ef4444)");
+            setHealthTips(tips);
+            setLastUpdate(new Date().toLocaleString());
+
+            setTempData({
+              labels: asc.map((r: any) => new Date(r.timestamp).toLocaleTimeString()),
+              datasets: [{
+                label: "Temperature (°C)",
+                data: asc.map((r: any) => r.temp),
+                borderColor: "#4ade80",
+                backgroundColor: "rgba(74,222,128,0.2)",
+                tension: 0.4,
+              }],
+            });
+            setSoilData({
+              labels: asc.map((r: any) => new Date(r.timestamp).toLocaleTimeString()),
+              datasets: [{
+                label: "Soil Moisture",
+                data: asc.map((r: any) => r.soil),
+                borderColor: "#22d3ee",
+                backgroundColor: "rgba(34,211,238,0.2)",
+                tension: 0.4,
+              }],
+            });
+            // Detect local alerts from the latest sensor reading and insert into Supabase if new
+            try {
+              const localAlerts = detectLocalAlerts(asc);
+              console.log('[Dashboard] localAlerts detected:', localAlerts);
+              if (localAlerts && localAlerts.length > 0) {
+                // Compare with recent alerts fetched earlier (alertData)
+                const existing = (typeof alertData !== 'undefined' && alertData) ? alertData : [];
+                const newAlerts = localAlerts.filter((la: any) => !existing.some((e: any) => e.type === la.type && new Date(e.triggered_at).toISOString() === new Date(la.triggered_at).toISOString()));
+                console.log('[Dashboard] newAlerts to insert:', newAlerts);
+                if (newAlerts.length > 0) {
+                  // Insert only columns that exist in the DB schema to avoid PostgREST PGRST204 errors.
+                  // Many projects store only `type` and `triggered_at` in alerts — sanitize payload accordingly.
+                  const payload = newAlerts.map((a: any) => ({ type: a.type, triggered_at: a.triggered_at }));
+                  const { data: inserted, error: insertError } = await supabase.from('alerts').insert(payload).select();
+                  console.log('[Dashboard] supabase.insert alerts result:', { inserted, insertError });
+                  if (!insertError) {
+                    // Prepend inserted alerts to state so recent appear first
+                    setAlerts(prev => {
+                      const next = (inserted || payload).concat(prev || []);
+                      return next.slice(0, 50);
+                    });
+                  } else {
+                    // If insert fails due to row-level security (RLS) we still want the UI to show
+                    // the locally-detected alerts so the user sees them immediately.
+                    console.error('[Dashboard] insertError:', insertError);
+                    const isRls = (insertError && (insertError.code === '42501' || String(insertError.message).toLowerCase().includes('row-level security')));
+                    if (isRls) {
+                      console.warn('[Dashboard] Insert blocked by RLS. Showing local alerts locally but not persisted.');
+                      // Show locally-detected alerts in UI so Recent Alerts isn't empty
+                      setAlerts(prev => (payload || []).concat(prev || []).slice(0, 50));
+                      // Provide guidance for how to fix in Supabase (console only)
+                      console.info('[Dashboard] To persist alerts in Supabase, either:\n' +
+                        ' - Disable RLS for the `alerts` table (not recommended for production),\n' +
+                        ' - Add an insert policy allowing the client role to insert, or\n' +
+                        ' - Insert alerts server-side (Edge Function or server) using the service_role key.');
+                      setError('Insert blocked by Supabase row-level security (alerts not persisted). See console for guidance.');
+                    } else {
+                      // Other errors: keep local alerts visible too and log the error
+                      setAlerts(prev => (payload || []).concat(prev || []).slice(0, 50));
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('Local alert detection/insert failed', e);
+            }
+          }
+          // Fetch weather early so predictions can use it in the ML/prediction step
+          let weatherLocal = weather;
+          try {
+            const resp = await fetch(
+              `https://api.openweathermap.org/data/2.5/weather?q=${WEATHER_CITY}&appid=${WEATHER_API_KEY}&units=metric`
+            );
+            if (resp.ok) {
+              const w = await resp.json();
+              setWeather(w);
+              weatherLocal = w;
+            } else {
+              setWeather(null);
+              weatherLocal = null;
+            }
+          } catch (e) {
+            setWeather(null);
+            weatherLocal = null;
+          }
+
+          // --- ML Pattern Analysis ---
+        if (data && data.length >= 5) {
+          const temps = data.map((r: any) => r.temp);
+          const soils = data.map((r: any) => r.soil);
+          const latest = data[data.length - 1];
+          const tempTrend = detectTrend(temps);
+          const soilTrend = detectTrend(soils);
+          const cycle = detectDailyCycle(data);
+          const tempAnomaly = calculateAnomalyScore(temps.slice(0, -1), latest.temp);
+          const soilAnomaly = calculateAnomalyScore(soils.slice(0, -1), latest.soil);
+          const maxAnomaly = Math.max(parseFloat(String(tempAnomaly.score)), parseFloat(String(soilAnomaly.score)));
+          const confidence = Math.min(95, 50 + data.length * 0.5);
+          // Trend
+          const trendEmoji = soilTrend.direction === 'rising' ? '📈' : soilTrend.direction === 'falling' ? '📉' : '➡️';
+          setMlTrend(trendEmoji);
+          setMlTrendDesc(`Soil: ${soilTrend.direction}, Temp: ${tempTrend.direction}`);
+          // Daily Cycle
+          setMlCycle(cycle.detected ? '✅' : '❌');
+          setMlCycleDesc(cycle.detected ? `±${cycle.variation}°C variation detected` : 'No clear pattern yet');
+          // Anomaly
+          setMlAnomaly(`${maxAnomaly}%`);
+          setMlAnomalyDesc(maxAnomaly > 50 ? 'Unusual readings!' : 'All normal');
+          // Confidence
+          setMlConfidence(`${confidence.toFixed(0)}%`);
+          setMlConfidenceFill(confidence);
+          // Insights
+          setMlInsights(generateMLInsights(data, soilTrend, cycle, { isAnomaly: maxAnomaly > 50, score: maxAnomaly }, weatherLocal));
+
+          // --- Weather-Aware Predictions ---
+          // Predict next temperature and soil moisture based on trend and weather
+          let predictedTemp = "--";
+          let predictedTempSource = "--";
+          let predictedSoil = "--";
+          let predictedSoilSource = "--";
+          let predictedWatering = "--";
+          let predictedWateringReason = "--";
+          let predChartData = null;
+
+          if (latest) {
+            // Simple prediction: next hour (works even without weather)
+            const tempDelta = tempTrend.slope;
+            const soilDelta = soilTrend.slope;
+            const weatherTemp = weatherLocal?.main?.temp ?? latest.temp;
+            const weatherHumidity = weatherLocal?.main?.humidity ?? latest.humidity;
+            const rain = (weatherLocal?.weather?.[0]?.main?.toLowerCase().includes("rain") || weatherLocal?.rain) ?? false;
+
+            predictedTemp = `${Math.round(latest.temp + tempDelta)}°C`;
+            predictedTempSource = weatherLocal ? `Trend + Weather (${weatherTemp}°C)` : `Trend-only prediction`;
+
+            // If rain expected, increase soil moisture prediction by ~100 units; otherwise use trend
+            predictedSoil = `${Math.round(latest.soil + soilDelta + (rain ? 100 : 0))}`;
+            predictedSoilSource = rain ? "Rain expected: soil moisture will increase" : "Trend-based prediction";
+
+            if (rain) {
+              predictedWatering = "Skip";
+              predictedWateringReason = "Rain detected/expected";
+            } else if (parseInt(predictedSoil) < 1800) {
+              predictedWatering = "Yes";
+              predictedWateringReason = "Predicted soil dry";
+            } else {
+              predictedWatering = "No";
+              predictedWateringReason = "Soil moisture sufficient";
+            }
+
+            // Prediction chart for next 6 hours
+            const hours = [1, 2, 3, 4, 5, 6];
+            const tempPreds = hours.map(h => Math.round(latest.temp + tempDelta * h));
+            const soilPreds = hours.map(h => Math.round(latest.soil + soilDelta * h + (rain ? 100 : 0)));
+            predChartData = {
+              labels: hours.map(h => `+${h}h`),
+              datasets: [
+                {
+                  label: "Predicted Temp (°C)",
+                  data: tempPreds,
+                  borderColor: "#f87171",
+                  backgroundColor: "rgba(248,113,113,0.1)",
+                  tension: 0.4,
+                  pointRadius: 2,
+                  yAxisID: 'y'
+                },
+                {
+                  label: "Predicted Soil",
+                  data: soilPreds,
+                  borderColor: "#22d3ee",
+                  backgroundColor: "rgba(34,211,238,0.1)",
+                  tension: 0.4,
+                  pointRadius: 2,
+                  yAxisID: 'y1'
+                }
+              ]
+            };
+          }
+
+          setPredTemp(predictedTemp);
+          setPredTempSource(predictedTempSource);
+          setPredSoil(predictedSoil);
+          setPredSoilSource(predictedSoilSource);
+          setPredWatering(predictedWatering);
+          setPredWateringReason(predictedWateringReason);
+          setPredictionChartData(predChartData);
+        } else {
+          setMlTrend("--");
+          setMlTrendDesc("Analyzing patterns...");
+          setMlCycle("--");
+          setMlCycleDesc("Learning cycles...");
+          setMlAnomaly("--");
+          setMlAnomalyDesc("Checking anomalies...");
+          setMlConfidence("--");
+          setMlConfidenceFill(0);
+          setMlInsights([{icon: "⏳", text: "Need more data points for ML analysis. Keep sensors running...", confidence: 0}]);
+
+          setPredTemp("--");
+          setPredSoilSource("--");
+          setPredWatering("--");
+          setPredWateringReason("--");
+          setPredictionChartData(null);
+        }
+      }
+
+      fetchData();
+      // Realtime subscription to update UI when new readings/alerts are inserted
+      let readingsChannel: any = null;
+      let alertsChannel: any = null;
+      try {
+        if ((supabase as any).channel) {
+          // Supabase v2 realtime
+          readingsChannel = (supabase as any).channel('realtime-readings')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'readings' }, (payload: any) => {
+              console.log('[Realtime] new reading received', payload);
+              const newRow = payload.record || payload.new || payload;
+              if (newRow) {
+                setSensorReadings(prev => {
+                  const next = (prev || []).concat(newRow);
+                  return next.slice(-48);
+                });
+                // Trigger an immediate full fetch to keep all derived state consistent
+                try { fetchData(); } catch (e) { /* ignore */ }
+              }
+            })
+            .subscribe();
+
+          alertsChannel = (supabase as any).channel('realtime-alerts')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alerts' }, (payload: any) => {
+              console.log('[Realtime] new alert received', payload);
+              const newRow = payload.record || payload.new || payload;
+              if (newRow) {
+                setAlerts(prev => [newRow].concat(prev || []).slice(0, 50));
+                try { fetchData(); } catch (e) { /* ignore */ }
+              }
+            })
+            .subscribe();
+        } else if ((supabase as any).from) {
+          // Fallback older API
+          readingsChannel = (supabase as any)
+            .from('readings')
+            .on('INSERT', (payload: any) => {
+              console.log('[Realtime-fallback] new reading', payload);
+              const newRow = payload.new || payload.record || payload;
+              if (newRow) {
+                setSensorReadings(prev => (prev || []).concat(newRow).slice(-48));
+                try { fetchData(); } catch (e) { /* ignore */ }
+              }
+            })
+            .subscribe();
+
+          alertsChannel = (supabase as any)
+            .from('alerts')
+            .on('INSERT', (payload: any) => {
+              console.log('[Realtime-fallback] new alert', payload);
+              const newRow = payload.new || payload.record || payload;
+              if (newRow) {
+                setAlerts(prev => [newRow].concat(prev || []).slice(0, 50));
+                try { fetchData(); } catch (e) { /* ignore */ }
+              }
+            })
+            .subscribe();
+        }
+      } catch (e) {
+        console.warn('[Dashboard] realtime subscription setup failed', e);
+      }
+      const interval = setInterval(fetchData, POLL_INTERVAL_MS);
+      return () => {
+        clearInterval(interval);
+        try {
+          if (readingsChannel && typeof readingsChannel.unsubscribe === 'function') readingsChannel.unsubscribe();
+          if (alertsChannel && typeof alertsChannel.unsubscribe === 'function') alertsChannel.unsubscribe();
+        } catch (e) { /* ignore */ }
+      };
+    }, [supabase]);
+
+  return (
+    <>
+      {/* Header */}
+      <header className="header">
+        <h1>🌱 Smart Plant Monitoring</h1>
+        <p className="subtitle">Real-time environmental analytics & predictions</p>
+        <div className="connection-status">
+          <div className="status-dot"></div>
+            <span>Live • Updating every 30s</span>
+            <button onClick={manualRefresh} style={{ marginLeft: 12, padding: '6px 10px', borderRadius: 6, background: '#334155', color: '#fff', border: 'none', cursor: 'pointer' }}>Refresh</button>
+        </div>
+      </header>
+
+      {error && (
+        <div className="error-banner" style={{ padding: "1rem", backgroundColor: "#fee2e2", color: "#dc2626", margin: "1rem", borderRadius: "8px" }}>
+          Error fetching data: {error}
+        </div>
+      )}
+
+      {/* Stats Overview */}
+      <section className="stats-container">
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="icon">🌡️</div>
+            <div className="value" id="currentTemp">{currentTemp}</div>
+            <div className="label">Temperature (°C)</div>
+            <div className={trendBadges.temp.className} id="tempTrendBadge">{trendBadges.temp.text}</div>
+          </div>
+          <div className="stat-card">
+            <div className="icon">💧</div>
+            <div className="value" id="currentSoil">{currentSoil}</div>
+            <div className="label">Soil Moisture</div>
+            <div className={trendBadges.soil.className} id="soilTrendBadge">{trendBadges.soil.text}</div>
+          </div>
+          <div className="stat-card">
+            <div className="icon">💡</div>
+            <div className="value" id="currentLight">{currentLight}</div>
+            <div className="label">Light Intensity</div>
+            <div className={trendBadges.light.className} id="lightTrendBadge">{trendBadges.light.text}</div>
+          </div>
+          <div className="stat-card">
+            <div className="icon">💨</div>
+            <div className="value" id="currentHumidity">{currentHumidity}</div>
+            <div className="label">Humidity (%)</div>
+            <div className={trendBadges.humidity.className} id="humidityTrendBadge">{trendBadges.humidity.text}</div>
+          </div>
+        </div>
+      </section>
+
+
+      {/* Weather Widget */} 
+      <section className="stats-container">
+        <div className="weather-widget" id="weatherWidget">
+          <div className="weather-main">
+            <div className="weather-icon" id="weatherIcon">{weather?.weather?.[0]?.icon ? (
+              <img src={`https://openweathermap.org/img/wn/${weather.weather[0].icon}@2x.png`} alt="" style={{width: 48, height: 48}} />
+            ) : "🌤️"}</div>
+            <div className="weather-info">
+              <h4 id="weatherTemp">{weather?.main?.temp !== undefined ? `${Math.round(weather.main.temp)}°C` : "--°C"}</h4>
+              <div className="weather-desc" id="weatherDesc">{weather?.weather?.[0]?.description ? weather.weather[0].description : "Loading weather..."}</div>
+              <div style={{ color: "#60a5fa", fontSize: "0.85rem" }} id="weatherLocation">📍 {weather?.name || WEATHER_CITY}, India</div>
+            </div>
+          </div>
+          <div className="weather-details">
+            <div className="weather-detail">💧 Humidity: <span id="weatherHumidity">{weather?.main?.humidity ?? "--"}</span>%</div>
+            <div className="weather-detail">🌬️ Wind: <span id="weatherWind">{weather?.wind?.speed ?? "--"}</span> m/s</div>
+            <div className="weather-detail">👁️ Visibility: <span id="weatherVisibility">{weather?.visibility !== undefined ? (weather.visibility/1000).toFixed(1) : "--"}</span> km</div>
+            <div className="weather-detail">🌡️ Feels like: <span id="weatherFeels">{weather?.main?.feels_like !== undefined ? Math.round(weather.main.feels_like) : "--"}</span>°C</div>
+          </div>
+          <div className="weather-alerts" id="weatherAlerts"></div>
+        </div>
+      </section>
+
+      {/* Health Indicator */}
+      <section className="health-section">
+        <div className="health-bar-container">
+          <div className="health-label">
+            <h3>🏥 Overall Plant Health</h3>
+            <span className="health-score" id="healthScore" style={{ color: healthScore === '--' ? undefined : (parseInt(healthScore) > 70 ? "#4ade80" : parseInt(healthScore) > 40 ? "#fbbf24" : "#f87171") }}>{healthScore}</span>
+          </div>
+          <div className="health-bar">
+            <div className="health-bar-fill" id="healthBarFill" style={{ width: healthBarFill, background: healthBarColor }}></div>
+          </div>
+          <div className="health-tips" id="healthTips">
+            {healthTips.map((tip, idx) => (
+              <span className={`health-tip tip-${tip.type}`} key={idx}>{tip.text}</span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Main Dashboard Grid */}
+      <main className="dashboard-grid">
+        {/* Temperature Chart */}
+        <div className="card">
+          <h3>🌡️ Temperature Trend (24h)</h3>
+          {tempData && <ChartLine data={tempData} options={{
+            responsive: true,
+            plugins: {
+              legend: { labels: { color: '#e2e8f0' } },
+              title: { display: false }
+            },
+            scales: {
+              x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+              y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            }
+          }} />}
+        </div>
+        <div className="card">
+          <h3>💧 Soil Moisture Trend (24h)</h3>
+          {soilData && <ChartLine data={soilData} options={{
+            responsive: true,
+            plugins: {
+              legend: { labels: { color: '#e2e8f0' } },
+              title: { display: false }
+            },
+            scales: {
+              x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+              y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            }
+          }} />}
+        </div>
+
+        {/* Multi-Metric Chart */}
+        <div className="card">
+          <h3>📊 All Sensors Overview</h3>
+          {multiChartData && (
+            <ChartLine
+              data={multiChartData}
+              options={{
+                responsive: true,
+                plugins: {
+                  legend: { labels: { color: '#e2e8f0', font: { size: 12 } } },
+                  title: { display: false }
+                },
+                scales: {
+                  x: { ticks: { color: '#94a3b8', maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Time', color: '#e2e8f0', font: { size: 12, weight: 'bold' } } },
+                  y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Sensor Values (Normalized)', color: '#a78bfa', font: { size: 12, weight: 'bold' } } }
+                }
+              }}
+            />
+          )}
+        </div>
+
+        {/* System Health Radar */}
+        <div className="card">
+          <h3>⚡ System Health Score</h3>
+          {radarData && (
+            <Radar
+              data={radarData}
+              options={{
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                  r: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: { color: '#94a3b8', backdropColor: 'transparent' },
+                    grid: { color: 'rgba(255,255,255,0.1)' },
+                    pointLabels: { color: '#e2e8f0' }
+                  }
+                }
+              }}
+            />
+          )}
+        </div>
+
+        {/* Recent Alerts */}
+        <div className="card">
+          <h3>🚨 Recent Alerts</h3>
+          <div className="alert-list" id="alertList">
+            {alerts && alerts.length > 0 ? (
+              alerts.slice(0, 10).map((alert, idx) => {
+                const alertIcons: any = {
+                  soil_dry: "🌵",
+                  soil_wet: "💦",
+                  temp_high: "🔥",
+                  temp_low: "❄️",
+                  light_low: "🌑",
+                  humidity_high: "🌫️",
+                  humidity_low: "🏜️"
+                };
+                const severity = alert.severity || "info";
+                const type = alert.type || "unknown";
+                const icon = alertIcons[type] || "⚠️";
+                const time = new Date(alert.triggered_at).toLocaleString();
+                return (
+                  <div className={`alert-item alert-${severity}`} key={idx}>
+                    <div className="alert-icon">{icon}</div>
+                    <div className="alert-content">
+                      <div className="alert-type">{type.replace(/_/g, " ")}</div>
+                      <div className="alert-time">{time}</div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="no-alerts">
+                <div className="icon">✅</div>
+                <p>No recent alerts — your plant is happy!</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Predictions */}
+        <div className="card">
+          <h3>🔮 Weather-Aware Predictions</h3>
+          <div className="predictions-grid">
+            <div className="prediction-card">
+              <div className="pred-value" id="predTemp">{predTemp}</div>
+              <div className="pred-label">Expected Temp</div>
+              <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4 }} id="predTempSource">{predTempSource}</div>
+            </div>
+            <div className="prediction-card">
+              <div className="pred-value" id="predSoil">{predSoil}</div>
+              <div className="pred-label">Expected Soil</div>
+              <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4 }} id="predSoilSource">{predSoilSource}</div>
+            </div>
+            <div className="prediction-card">
+              <div className="pred-value" id="predWatering">{predWatering}</div>
+              <div className="pred-label">Watering Need</div>
+              <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4 }} id="predWateringReason">{predWateringReason}</div>
+            </div>
+          </div>
+          {predictionChartData && (
+            <ChartLine
+              data={predictionChartData}
+              options={{
+                responsive: true,
+                plugins: {
+                  legend: { labels: { color: '#e2e8f0', font: { size: 12 } } },
+                  title: { display: false }
+                },
+                scales: {
+                  x: { ticks: { color: '#94a3b8', maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Future Time (Hours)', color: '#e2e8f0', font: { size: 12, weight: 'bold' } } },
+                  y: { // left axis for temperature
+                    type: 'linear',
+                    position: 'left',
+                    ticks: { color: '#f87171' },
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    title: { display: true, text: 'Temperature (°C)', color: '#f87171', font: { size: 12, weight: 'bold' } }
+                  },
+                  y1: { // right axis for soil moisture
+                    type: 'linear',
+                    position: 'right',
+                    ticks: { color: '#22d3ee' },
+                    grid: { drawOnChartArea: false },
+                    suggestedMin: 0,
+                    suggestedMax: 3000,
+                    title: { display: true, text: 'Soil Moisture', color: '#22d3ee', font: { size: 12, weight: 'bold' } }
+                  }
+                }
+              }}
+            />
+          )}
+        </div>
+
+        {/* ML Pattern Analysis */}
+        <div className="card ml-section">
+          <div className="ml-header">
+            <h3>🧠 ML Pattern Analysis</h3>
+            <span className="ml-badge">AI-Powered</span>
+          </div>
+          <div className="patterns-grid" id="patternsGrid">
+            <div className="pattern-card">
+              <div className="pattern-icon">📈</div>
+              <div className="pattern-title">Trend Detection</div>
+              <div className="pattern-value" id="mlTrend">{mlTrend}</div>
+              <div className="pattern-desc" id="mlTrendDesc">{mlTrendDesc}</div>
+            </div>
+            <div className="pattern-card">
+              <div className="pattern-icon">🔄</div>
+              <div className="pattern-title">Daily Cycle</div>
+              <div className="pattern-value" id="mlCycle">{mlCycle}</div>
+              <div className="pattern-desc" id="mlCycleDesc">{mlCycleDesc}</div>
+            </div>
+            <div className="pattern-card">
+              <div className="pattern-icon">⚠️</div>
+              <div className="pattern-title">Anomaly Score</div>
+              <div className="pattern-value" id="mlAnomaly" style={{ color: parseInt(mlAnomaly) > 50 ? '#f87171' : '#4ade80' }}>{mlAnomaly}</div>
+              <div className="pattern-desc" id="mlAnomalyDesc">{mlAnomalyDesc}</div>
+            </div>
+            <div className="pattern-card">
+              <div className="pattern-icon">🎯</div>
+              <div className="pattern-title">Confidence</div>
+              <div className="pattern-value" id="mlConfidence">{mlConfidence}</div>
+              <div className="confidence-bar"><div className="confidence-fill" id="confidenceFill" style={{ width: `${mlConfidenceFill}%`, background: 'linear-gradient(90deg, #ec4899, #8b5cf6)' }}></div></div>
+            </div>
+          </div>
+          <div className="ml-insights">
+            <h4>🔍 AI Insights & Recommendations</h4>
+            <div id="mlInsights">
+              {mlInsights.map((insight, idx) => (
+                <div className="insight-item" key={idx}>
+                  <span style={{ fontSize: '1.2rem' }}>{insight.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div>{insight.text}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 4 }}>
+                      Confidence: {insight.confidence}%
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="footer">
+        <p>🌱 Smart Plant Monitoring System v2.0</p>
+        <p className="last-updated">Last updated: <span id="lastUpdate">{lastUpdate}</span></p>
+      </footer>
+    </>
+  );
+};
+
+export default Dashboard;
