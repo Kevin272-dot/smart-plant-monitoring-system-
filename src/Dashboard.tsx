@@ -33,10 +33,31 @@ ChartJS.register(
 
 // Configuration is read from Vite environment variables. Create a .env file with VITE_ prefixed keys.
 // Example keys are provided in `.env.example` (do NOT commit your real `.env`).
-const SUPABASE_URL = (import.meta as any)?.env?.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = (import.meta as any)?.env?.VITE_SUPABASE_KEY || '';
-const WEATHER_API_KEY = (import.meta as any)?.env?.VITE_WEATHER_API_KEY || '';
+const SUPABASE_URL = (import.meta as any)?.env?.VITE_SUPABASE_URL || 'https://yhgyeaygmampbvfanumx.supabase.co';
+const SUPABASE_KEY = (import.meta as any)?.env?.VITE_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InloZ3llYXlnbWFtcGJ2ZmFudW14Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0NTk3NTAsImV4cCI6MjA4MzAzNTc1MH0.VKlVMFg3RKHjmnseIWfBVc5QZX7vWJsq9oaiIu7kmwI';
+const WEATHER_API_KEY = (import.meta as any)?.env?.VITE_WEATHER_API_KEY || 'a2f5686772b6e58369b6aa0af5c356f6';
 const WEATHER_CITY = (import.meta as any)?.env?.VITE_WEATHER_CITY || 'Chennai';
+
+// If required Vite env vars are missing, we will render a friendly placeholder component.
+const MISSING_CONFIG = !SUPABASE_URL || !SUPABASE_KEY;
+if (MISSING_CONFIG) {
+  // eslint-disable-next-line no-console
+  console.error('[Dashboard] Missing VITE_SUPABASE_URL or VITE_SUPABASE_KEY. Create a .env from .env.example and restart dev server.');
+}
+
+// Top-level component to render when env config is missing
+function DashboardMissingConfig() {
+  return (
+    <div style={{ padding: 24 }}>
+      <h2 style={{ marginBottom: 8 }}>Configuration required</h2>
+      <p>VITE_SUPABASE_URL or VITE_SUPABASE_KEY is missing. Create a local <code>.env</code> from <code>.env.example</code> and restart the dev server.</p>
+      <p>Example entries:</p>
+      <pre style={{ background: '#0f172a', color: '#e2e8f0', padding: 12 }}>VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_KEY=REPLACE_WITH_YOUR_ANON_KEY
+VITE_WEATHER_API_KEY=REPLACE_WITH_YOUR_OPENWEATHERMAP_KEY</pre>
+    </div>
+  );
+}
 
 // Detect local alerts based on sensor readings
 function detectLocalAlerts(readings: any[]) {
@@ -1025,4 +1046,5 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+// If config is missing, export the small placeholder component instead of the full Dashboard
+export default (MISSING_CONFIG ? DashboardMissingConfig : Dashboard);
