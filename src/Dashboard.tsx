@@ -59,13 +59,18 @@ VITE_WEATHER_API_KEY=REPLACE_WITH_YOUR_OPENWEATHERMAP_KEY</pre>
   );
 }
 
-// Clamp a sensor reading's values to realistic ESP32 ranges to prevent graph blow-ups
+// Convert raw 12-bit ADC value (0-4095) to percentage (0-100)
+function adcToPercent(raw: number) {
+  return Math.round((Math.max(0, Math.min(4095, raw)) / 4095) * 100);
+}
+
+// Clamp a sensor reading's values to realistic ESP32 ranges and convert soil/light to %
 function clampReading(r: any) {
   return {
     ...r,
     temp: Math.max(-10, Math.min(60, Number(r.temp) || 0)),
-    soil: Math.max(0, Math.min(4095, Number(r.soil) || 0)),
-    light: Math.max(0, Math.min(4095, Number(r.light) || 0)),
+    soil: adcToPercent(Number(r.soil) || 0),
+    light: adcToPercent(Number(r.light) || 0),
     humidity: Math.max(0, Math.min(100, Number(r.humidity) || 0)),
   };
 }
@@ -76,14 +81,14 @@ function detectLocalAlerts(readings: any[]) {
   const alerts = [];
   const last = readings[readings.length - 1];
   const ts = new Date(last.timestamp).toISOString();
-  if (last.soil < 1800) {
+  if (last.soil < 44) {
     alerts.push({
       type: "soil_dry",
       severity: "critical",
       triggered_at: ts,
       message: "Soil moisture is too low."
     });
-  } else if (last.soil > 2600) {
+  } else if (last.soil > 63) {
     alerts.push({
       type: "soil_wet",
       severity: "warning",
@@ -106,7 +111,7 @@ function detectLocalAlerts(readings: any[]) {
       message: "Temperature is too low."
     });
   }
-  if (last.light < 500) {
+  if (last.light < 12) {
     alerts.push({
       type: "light_low",
       severity: "warning",
@@ -237,7 +242,7 @@ const Dashboard = () => {
     function generateMLInsights(readings: any[], trend: any, cycle: any, anomaly: any, weather: any) {
       const insights = [];
       const latest = readings[readings.length - 1];
-      if (trend.direction === 'falling' && latest.soil < 2000) {
+      if (trend.direction === 'falling' && latest.soil < 49) {
         insights.push({ icon: '💧', text: 'Soil moisture is declining. Based on the trend, watering may be needed in 4-6 hours.', confidence: 85 });
       }
       if (trend.direction === 'rising' && latest.temp > 30) {
@@ -260,13 +265,13 @@ const Dashboard = () => {
       if (anomaly.isAnomaly) {
         insights.push({ icon: '⚠️', text: 'Unusual reading detected! Current values deviate significantly from normal patterns.', confidence: 90 });
       }
-      if (latest.soil >= 2000 && latest.soil <= 2400 && latest.temp >= 24 && latest.temp <= 30) {
+      if (latest.soil >= 49 && latest.soil <= 59 && latest.temp >= 24 && latest.temp <= 30) {
         insights.push({ icon: '✅', text: 'Current conditions are optimal. Plant is in ideal environment based on historical patterns.', confidence: 95 });
       }
       if (readings.length >= 20) {
         const soilTrend = detectTrend(readings.slice(-20).map(r => r.soil));
-        if (soilTrend.slope < -5) {
-          const hoursUntilDry = Math.abs((latest.soil - 1800) / (soilTrend.slope * 4));
+        if (soilTrend.slope < -1) {
+          const hoursUntilDry = Math.abs((latest.soil - 44) / (soilTrend.slope * 4));
           if (hoursUntilDry < 24) {
             insights.push({ icon: '⏰', text: `ML predicts soil will reach critical dryness in ~${hoursUntilDry.toFixed(0)} hours.`, confidence: 70 });
           }
@@ -300,8 +305,8 @@ const Dashboard = () => {
         const avgHumidity = humidity.reduce((a: number, b: number) => a + b, 0) / humidity.length;
         const radarScores = {
           "Temp Balance": Math.max(0, 100 - Math.abs(avgTemp - 27) * 5),
-          "Soil Health": avgSoil >= 1800 && avgSoil <= 2600 ? 90 : 50,
-          "Light Level": Math.min(100, (avgLight / 15)),
+          "Soil Health": avgSoil >= 44 && avgSoil <= 63 ? 90 : 50,
+          "Light Level": Math.min(100, avgLight),
           "Humidity": avgHumidity >= 40 && avgHumidity <= 80 ? 90 : 60,
           "Consistency": 85 // Based on variance
         };
@@ -345,8 +350,8 @@ const Dashboard = () => {
             pointRadius: 0
           },
           {
-            label: "Light (÷10)",
-            data: lights.map((l: number) => l / 10),
+            label: "Light (%)",
+            data: lights,
             borderColor: "#fbbf24",
             tension: 0.4,
             pointRadius: 0
@@ -424,8 +429,8 @@ const Dashboard = () => {
 
           const latest = asc[asc.length - 1];
             setCurrentTemp(latest.temp.toFixed(1));
-            setCurrentSoil(latest.soil.toString());
-            setCurrentLight(latest.light.toString());
+            setCurrentSoil(`${latest.soil}%`);
+            setCurrentLight(`${latest.light}%`);
             setCurrentHumidity(latest.humidity.toFixed(1));
 
             const newBadges: {[k: string]: {text: string, className: string}} = {};
@@ -446,14 +451,14 @@ const Dashboard = () => {
 
             let score = 100;
             const tips: Array<{text: string, type: string}> = [];
-            if (latest.soil < 1800) { score -= 30; tips.push({ text: "🚨 Water your plant!", type: "critical" }); }
-            else if (latest.soil > 2600) { score -= 20; tips.push({ text: "💦 Reduce watering", type: "warning" }); }
+            if (latest.soil < 44) { score -= 30; tips.push({ text: "🚨 Water your plant!", type: "critical" }); }
+            else if (latest.soil > 63) { score -= 20; tips.push({ text: "💦 Reduce watering", type: "warning" }); }
             else { tips.push({ text: "💧 Soil moisture optimal", type: "good" }); }
             if (latest.temp > 35) { score -= 25; tips.push({ text: "🔥 Too hot!", type: "critical" }); }
             else if (latest.temp < 18) { score -= 20; tips.push({ text: "❄️ Too cold!", type: "warning" }); }
             else { tips.push({ text: "🌡️ Temperature ideal", type: "good" }); }
-            if (latest.light < 500) { score -= 15; tips.push({ text: "🌑 More light needed", type: "warning" }); }
-            else if (latest.light > 1600) { score -= 10; tips.push({ text: "☀️ Very bright", type: "warning" }); }
+            if (latest.light < 12) { score -= 15; tips.push({ text: "🌑 More light needed", type: "warning" }); }
+            else if (latest.light > 39) { score -= 10; tips.push({ text: "☀️ Very bright", type: "warning" }); }
             if (latest.humidity > 85) { score -= 15; tips.push({ text: "🌫️ High humidity", type: "warning" }); }
             else if (latest.humidity < 40) { score -= 10; tips.push({ text: "🏜️ Low humidity", type: "warning" }); }
             score = Math.max(0, score);
@@ -476,7 +481,7 @@ const Dashboard = () => {
             setSoilData({
               labels: asc.map((r: any) => new Date(r.timestamp).toLocaleTimeString()),
               datasets: [{
-                label: "Soil Moisture",
+                label: "Soil Moisture (%)",
                 data: asc.map((r: any) => r.soil),
                 borderColor: "#22d3ee",
                 backgroundColor: "rgba(34,211,238,0.2)",
@@ -598,14 +603,14 @@ const Dashboard = () => {
             predictedTemp = `${Math.round(latest.temp + tempDelta)}°C`;
             predictedTempSource = weatherLocal ? `Trend + Weather (${weatherTemp}°C)` : `Trend-only prediction`;
 
-            // If rain expected, increase soil moisture prediction by ~100 units; otherwise use trend
-            predictedSoil = `${Math.round(latest.soil + soilDelta + (rain ? 100 : 0))}`;
+            // Predict soil % — rain adds ~2% boost
+            predictedSoil = `${Math.min(100, Math.max(0, Math.round(latest.soil + soilDelta + (rain ? 2 : 0))))}%`;
             predictedSoilSource = rain ? "Rain expected: soil moisture will increase" : "Trend-based prediction";
 
             if (rain) {
               predictedWatering = "Skip";
               predictedWateringReason = "Rain detected/expected";
-            } else if (parseInt(predictedSoil) < 1800) {
+            } else if (parseInt(predictedSoil) < 44) {
               predictedWatering = "Yes";
               predictedWateringReason = "Predicted soil dry";
             } else {
@@ -616,7 +621,7 @@ const Dashboard = () => {
             // Prediction chart for next 6 hours
             const hours = [1, 2, 3, 4, 5, 6];
             const tempPreds = hours.map(h => Math.round(latest.temp + tempDelta * h));
-            const soilPreds = hours.map(h => Math.round(latest.soil + soilDelta * h + (rain ? 100 : 0)));
+            const soilPreds = hours.map(h => Math.min(100, Math.max(0, Math.round(latest.soil + soilDelta * h + (rain ? 2 : 0)))));
             predChartData = {
               labels: hours.map(h => `+${h}h`),
               datasets: [
@@ -630,7 +635,7 @@ const Dashboard = () => {
                   yAxisID: 'y'
                 },
                 {
-                  label: "Predicted Soil",
+                  label: "Predicted Soil (%)",
                   data: soilPreds,
                   borderColor: "#22d3ee",
                   backgroundColor: "rgba(34,211,238,0.1)",
@@ -770,13 +775,13 @@ const Dashboard = () => {
           <div className="stat-card">
             <div className="icon">💧</div>
             <div className="value" id="currentSoil">{currentSoil}</div>
-            <div className="label">Soil Moisture</div>
+            <div className="label">Soil Moisture (%)</div>
             <div className={trendBadges.soil.className} id="soilTrendBadge">{trendBadges.soil.text}</div>
           </div>
           <div className="stat-card">
             <div className="icon">💡</div>
             <div className="value" id="currentLight">{currentLight}</div>
-            <div className="label">Light Intensity</div>
+            <div className="label">Light Intensity (%)</div>
             <div className={trendBadges.light.className} id="lightTrendBadge">{trendBadges.light.text}</div>
           </div>
           <div className="stat-card">
@@ -857,7 +862,7 @@ const Dashboard = () => {
             },
             scales: {
               x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-              y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, suggestedMin: 0, suggestedMax: 4095 }
+              y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, suggestedMin: 0, suggestedMax: 100 }
             }
           }} />}
         </div>
@@ -919,7 +924,15 @@ const Dashboard = () => {
                   temp_low: "❄️",
                   light_low: "🌑",
                   humidity_high: "🌫️",
-                  humidity_low: "🏜️"
+                  humidity_low: "🏜️",
+                  // ESP32 human-readable format mappings
+                  "Soil too dry": "🌵",
+                  "Soil too wet": "💦",
+                  "Temp too high": "🔥",
+                  "Temp too low": "❄️",
+                  "Low light": "🌑",
+                  "High humidity": "🌫️",
+                  "Low humidity": "🏜️"
                 };
                 const severity = alert.severity || "info";
                 const type = alert.type || "unknown";
@@ -990,8 +1003,8 @@ const Dashboard = () => {
                     ticks: { color: '#22d3ee' },
                     grid: { drawOnChartArea: false },
                     suggestedMin: 0,
-                    suggestedMax: 4095,
-                    title: { display: true, text: 'Soil Moisture', color: '#22d3ee', font: { size: 12, weight: 'bold' } }
+                    suggestedMax: 100,
+                    title: { display: true, text: 'Soil Moisture (%)', color: '#22d3ee', font: { size: 12, weight: 'bold' } }
                   }
                 }
               }}
