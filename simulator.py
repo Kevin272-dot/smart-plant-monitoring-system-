@@ -23,8 +23,8 @@ from enum import Enum
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://yhgyeaygmampbvfanumx.supabase.co")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")  # Set via environment variable
+SUPABASE_URL = os.environ.get("VITE_SUPABASE_URL") or os.environ.get("SUPABASE_URL", "https://yhgyeaygmampbvfanumx.supabase.co")
+SUPABASE_KEY = os.environ.get("VITE_SUPABASE_KEY") or os.environ.get("SUPABASE_KEY", "")  # Reads from .env
 API_ENDPOINT = f"{SUPABASE_URL}/rest/v1/readings"
 ALERTS_ENDPOINT = f"{SUPABASE_URL}/rest/v1/alerts"
 

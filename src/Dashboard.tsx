@@ -59,6 +59,17 @@ VITE_WEATHER_API_KEY=REPLACE_WITH_YOUR_OPENWEATHERMAP_KEY</pre>
   );
 }
 
+// Clamp a sensor reading's values to realistic ESP32 ranges to prevent graph blow-ups
+function clampReading(r: any) {
+  return {
+    ...r,
+    temp: Math.max(-10, Math.min(60, Number(r.temp) || 0)),
+    soil: Math.max(0, Math.min(4095, Number(r.soil) || 0)),
+    light: Math.max(0, Math.min(4095, Number(r.light) || 0)),
+    humidity: Math.max(0, Math.min(100, Number(r.humidity) || 0)),
+  };
+}
+
 // Detect local alerts based on sensor readings
 function detectLocalAlerts(readings: any[]) {
   if (!readings || readings.length === 0) return [];
@@ -134,7 +145,7 @@ const Dashboard = () => {
         .order('timestamp', { ascending: false })
         .limit(48);
       console.log('[ManualRefresh] readings result:', { data, error });
-      if (!error && data) setSensorReadings(data.slice().reverse());
+      if (!error && data) setSensorReadings(data.slice().reverse().map(clampReading));
 
       console.log('[ManualRefresh] fetching alerts...');
       const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -390,7 +401,7 @@ const Dashboard = () => {
         } else if (data && data.length > 0) {
           console.log('[Dashboard] readings count:', data.length, 'first:', data[0], 'last:', data[data.length - 1]);
           // data is returned newest-first; create an ascending copy (oldest->newest) for UI
-          const asc = data.slice().reverse();
+          const asc = data.slice().reverse().map(clampReading);
           setSensorReadings(asc);
           const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
           let { data: alertData, error: alertError } = await supabase
@@ -670,7 +681,7 @@ const Dashboard = () => {
               const newRow = payload.record || payload.new || payload;
               if (newRow) {
                 setSensorReadings(prev => {
-                  const next = (prev || []).concat(newRow);
+                  const next = (prev || []).concat(clampReading(newRow));
                   return next.slice(-48);
                 });
                 // Trigger an immediate full fetch to keep all derived state consistent
@@ -697,7 +708,7 @@ const Dashboard = () => {
               console.log('[Realtime-fallback] new reading', payload);
               const newRow = payload.new || payload.record || payload;
               if (newRow) {
-                setSensorReadings(prev => (prev || []).concat(newRow).slice(-48));
+                setSensorReadings(prev => (prev || []).concat(clampReading(newRow)).slice(-48));
                 try { fetchData(); } catch (e) { /* ignore */ }
               }
             })
@@ -832,7 +843,7 @@ const Dashboard = () => {
             },
             scales: {
               x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-              y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+              y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, suggestedMin: 0, suggestedMax: 50 }
             }
           }} />}
         </div>
@@ -846,7 +857,7 @@ const Dashboard = () => {
             },
             scales: {
               x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-              y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+              y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, suggestedMin: 0, suggestedMax: 4095 }
             }
           }} />}
         </div>
@@ -865,7 +876,7 @@ const Dashboard = () => {
                 },
                 scales: {
                   x: { ticks: { color: '#94a3b8', maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Time', color: '#e2e8f0', font: { size: 12, weight: 'bold' } } },
-                  y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Sensor Values (Normalized)', color: '#a78bfa', font: { size: 12, weight: 'bold' } } }
+                  y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, suggestedMin: 0, suggestedMax: 100, title: { display: true, text: 'Sensor Values (Normalized)', color: '#a78bfa', font: { size: 12, weight: 'bold' } } }
                 }
               }}
             />
@@ -969,6 +980,8 @@ const Dashboard = () => {
                     position: 'left',
                     ticks: { color: '#f87171' },
                     grid: { color: 'rgba(255,255,255,0.05)' },
+                    suggestedMin: 0,
+                    suggestedMax: 50,
                     title: { display: true, text: 'Temperature (°C)', color: '#f87171', font: { size: 12, weight: 'bold' } }
                   },
                   y1: { // right axis for soil moisture
@@ -977,7 +990,7 @@ const Dashboard = () => {
                     ticks: { color: '#22d3ee' },
                     grid: { drawOnChartArea: false },
                     suggestedMin: 0,
-                    suggestedMax: 3000,
+                    suggestedMax: 4095,
                     title: { display: true, text: 'Soil Moisture', color: '#22d3ee', font: { size: 12, weight: 'bold' } }
                   }
                 }
