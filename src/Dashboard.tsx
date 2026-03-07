@@ -59,18 +59,13 @@ VITE_WEATHER_API_KEY=REPLACE_WITH_YOUR_OPENWEATHERMAP_KEY</pre>
   );
 }
 
-// Convert raw 12-bit ADC value (0-4095) to percentage (0-100)
-function adcToPercent(raw: number) {
-  return Math.round((Math.max(0, Math.min(4095, raw)) / 4095) * 100);
-}
-
-// Clamp a sensor reading's values to realistic ESP32 ranges and convert soil/light to %
+// Clamp sensor values to valid percentage ranges (ESP32 already sends soil/light as %)
 function clampReading(r: any) {
   return {
     ...r,
     temp: Math.max(-10, Math.min(60, Number(r.temp) || 0)),
-    soil: adcToPercent(Number(r.soil) || 0),
-    light: adcToPercent(Number(r.light) || 0),
+    soil: Math.max(0, Math.min(100, Number(r.soil) || 0)),
+    light: Math.max(0, Math.min(100, Number(r.light) || 0)),
     humidity: Math.max(0, Math.min(100, Number(r.humidity) || 0)),
   };
 }
@@ -81,14 +76,14 @@ function detectLocalAlerts(readings: any[]) {
   const alerts = [];
   const last = readings[readings.length - 1];
   const ts = new Date(last.timestamp).toISOString();
-  if (last.soil < 44) {
+  if (last.soil < 30) {
     alerts.push({
       type: "soil_dry",
       severity: "critical",
       triggered_at: ts,
       message: "Soil moisture is too low."
     });
-  } else if (last.soil > 63) {
+  } else if (last.soil > 80) {
     alerts.push({
       type: "soil_wet",
       severity: "warning",
@@ -111,7 +106,7 @@ function detectLocalAlerts(readings: any[]) {
       message: "Temperature is too low."
     });
   }
-  if (last.light < 12) {
+  if (last.light < 10) {
     alerts.push({
       type: "light_low",
       severity: "warning",
@@ -242,7 +237,7 @@ const Dashboard = () => {
     function generateMLInsights(readings: any[], trend: any, cycle: any, anomaly: any, weather: any) {
       const insights = [];
       const latest = readings[readings.length - 1];
-      if (trend.direction === 'falling' && latest.soil < 49) {
+      if (trend.direction === 'falling' && latest.soil < 40) {
         insights.push({ icon: '💧', text: 'Soil moisture is declining. Based on the trend, watering may be needed in 4-6 hours.', confidence: 85 });
       }
       if (trend.direction === 'rising' && latest.temp > 30) {
@@ -265,13 +260,13 @@ const Dashboard = () => {
       if (anomaly.isAnomaly) {
         insights.push({ icon: '⚠️', text: 'Unusual reading detected! Current values deviate significantly from normal patterns.', confidence: 90 });
       }
-      if (latest.soil >= 49 && latest.soil <= 59 && latest.temp >= 24 && latest.temp <= 30) {
+      if (latest.soil >= 50 && latest.soil <= 70 && latest.temp >= 24 && latest.temp <= 30) {
         insights.push({ icon: '✅', text: 'Current conditions are optimal. Plant is in ideal environment based on historical patterns.', confidence: 95 });
       }
       if (readings.length >= 20) {
         const soilTrend = detectTrend(readings.slice(-20).map(r => r.soil));
         if (soilTrend.slope < -1) {
-          const hoursUntilDry = Math.abs((latest.soil - 44) / (soilTrend.slope * 4));
+          const hoursUntilDry = Math.abs((latest.soil - 30) / (soilTrend.slope * 4));
           if (hoursUntilDry < 24) {
             insights.push({ icon: '⏰', text: `ML predicts soil will reach critical dryness in ~${hoursUntilDry.toFixed(0)} hours.`, confidence: 70 });
           }
@@ -305,7 +300,7 @@ const Dashboard = () => {
         const avgHumidity = humidity.reduce((a: number, b: number) => a + b, 0) / humidity.length;
         const radarScores = {
           "Temp Balance": Math.max(0, 100 - Math.abs(avgTemp - 27) * 5),
-          "Soil Health": avgSoil >= 44 && avgSoil <= 63 ? 90 : 50,
+          "Soil Health": avgSoil >= 30 && avgSoil <= 80 ? 90 : 50,
           "Light Level": Math.min(100, avgLight),
           "Humidity": avgHumidity >= 40 && avgHumidity <= 80 ? 90 : 60,
           "Consistency": 85 // Based on variance
@@ -451,14 +446,15 @@ const Dashboard = () => {
 
             let score = 100;
             const tips: Array<{text: string, type: string}> = [];
-            if (latest.soil < 44) { score -= 30; tips.push({ text: "🚨 Water your plant!", type: "critical" }); }
-            else if (latest.soil > 63) { score -= 20; tips.push({ text: "💦 Reduce watering", type: "warning" }); }
+            if (latest.soil < 30) { score -= 30; tips.push({ text: "🚨 Water your plant!", type: "critical" }); }
+            else if (latest.soil > 80) { score -= 20; tips.push({ text: "💦 Reduce watering", type: "warning" }); }
+            else if (latest.soil <= 50) { score -= 5; tips.push({ text: "💧 Soil moisture moderate", type: "warning" }); }
             else { tips.push({ text: "💧 Soil moisture optimal", type: "good" }); }
             if (latest.temp > 35) { score -= 25; tips.push({ text: "🔥 Too hot!", type: "critical" }); }
             else if (latest.temp < 18) { score -= 20; tips.push({ text: "❄️ Too cold!", type: "warning" }); }
             else { tips.push({ text: "🌡️ Temperature ideal", type: "good" }); }
-            if (latest.light < 12) { score -= 15; tips.push({ text: "🌑 More light needed", type: "warning" }); }
-            else if (latest.light > 39) { score -= 10; tips.push({ text: "☀️ Very bright", type: "warning" }); }
+            if (latest.light < 10) { score -= 15; tips.push({ text: "🌑 More light needed", type: "warning" }); }
+            else if (latest.light > 90) { score -= 10; tips.push({ text: "☀️ Very bright", type: "warning" }); }
             if (latest.humidity > 85) { score -= 15; tips.push({ text: "🌫️ High humidity", type: "warning" }); }
             else if (latest.humidity < 40) { score -= 10; tips.push({ text: "🏜️ Low humidity", type: "warning" }); }
             score = Math.max(0, score);
@@ -610,7 +606,7 @@ const Dashboard = () => {
             if (rain) {
               predictedWatering = "Skip";
               predictedWateringReason = "Rain detected/expected";
-            } else if (parseInt(predictedSoil) < 44) {
+            } else if (parseInt(predictedSoil) < 30) {
               predictedWatering = "Yes";
               predictedWateringReason = "Predicted soil dry";
             } else {
