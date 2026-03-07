@@ -70,25 +70,26 @@ function clampReading(r: any) {
   };
 }
 
-// Detect local alerts based on sensor readings
+// Detect local alerts based on sensor readings (Bird's Nest Snake Plant)
+// Snake plants prefer dry soil — overwatering is far worse than under-watering.
 function detectLocalAlerts(readings: any[]) {
   if (!readings || readings.length === 0) return [];
   const alerts = [];
   const last = readings[readings.length - 1];
   const ts = new Date(last.timestamp).toISOString();
-  if (last.soil < 30) {
+  if (last.soil < 10) {
     alerts.push({
       type: "soil_dry",
-      severity: "critical",
-      triggered_at: ts,
-      message: "Soil moisture is too low."
-    });
-  } else if (last.soil > 80) {
-    alerts.push({
-      type: "soil_wet",
       severity: "warning",
       triggered_at: ts,
-      message: "Soil moisture is too high."
+      message: "Soil is very dry — time to water your Snake Plant."
+    });
+  } else if (last.soil > 50) {
+    alerts.push({
+      type: "soil_wet",
+      severity: "critical",
+      triggered_at: ts,
+      message: "Soil too wet — Snake Plants risk root rot! Let it dry out."
     });
   }
   if (last.temp > 35) {
@@ -96,37 +97,44 @@ function detectLocalAlerts(readings: any[]) {
       type: "temp_high",
       severity: "critical",
       triggered_at: ts,
-      message: "Temperature is too high."
+      message: "Temperature is too high for Snake Plant."
     });
-  } else if (last.temp < 18) {
+  } else if (last.temp < 10) {
+    alerts.push({
+      type: "temp_low",
+      severity: "critical",
+      triggered_at: ts,
+      message: "Temperature dangerously low — Snake Plants can't survive below 10°C."
+    });
+  } else if (last.temp < 15) {
     alerts.push({
       type: "temp_low",
       severity: "warning",
       triggered_at: ts,
-      message: "Temperature is too low."
+      message: "Temperature is getting cold for Snake Plant."
     });
   }
-  if (last.light < 10) {
+  if (last.light < 5) {
     alerts.push({
       type: "light_low",
       severity: "warning",
       triggered_at: ts,
-      message: "Light intensity is too low."
+      message: "Very low light — Snake Plants tolerate shade but need some light."
+    });
+  } else if (last.light > 90) {
+    alerts.push({
+      type: "light_high",
+      severity: "warning",
+      triggered_at: ts,
+      message: "Intense direct sunlight — move to indirect light to avoid leaf burn."
     });
   }
-  if (last.humidity > 85) {
+  if (last.humidity > 60) {
     alerts.push({
       type: "humidity_high",
       severity: "warning",
       triggered_at: ts,
-      message: "Humidity is too high."
-    });
-  } else if (last.humidity < 40) {
-    alerts.push({
-      type: "humidity_low",
-      severity: "warning",
-      triggered_at: ts,
-      message: "Humidity is too low."
+      message: "High humidity — Snake Plants prefer drier air (30-50%)."
     });
   }
   return alerts;
@@ -237,42 +245,51 @@ const Dashboard = () => {
     function generateMLInsights(readings: any[], trend: any, cycle: any, anomaly: any, weather: any) {
       const insights = [];
       const latest = readings[readings.length - 1];
-      if (trend.direction === 'falling' && latest.soil < 40) {
-        insights.push({ icon: '💧', text: 'Soil moisture is declining. Based on the trend, watering may be needed in 4-6 hours.', confidence: 85 });
+      // Snake Plant: dry soil is normal — only warn when very dry for extended period
+      if (trend.direction === 'falling' && latest.soil < 15) {
+        insights.push({ icon: '💧', text: 'Soil is drying out. Snake Plants like dry soil, but consider watering within 1-2 days if soil drops below 10%.', confidence: 80 });
+      }
+      if (latest.soil > 50) {
+        insights.push({ icon: '🚨', text: 'Soil is too wet! Snake Plants are drought-tolerant — overwatering causes root rot. Let soil dry completely before watering again.', confidence: 95 });
       }
       if (trend.direction === 'rising' && latest.temp > 30) {
-        insights.push({ icon: '🌡️', text: 'Temperature is rising. Consider moving plant to shade or increasing ventilation.', confidence: 78 });
+        insights.push({ icon: '🌡️', text: 'Temperature rising. Snake Plants tolerate warmth but prefer 15-29°C. Ensure good ventilation.', confidence: 78 });
       }
       if (weather) {
         if (weather.rain || weather.condition?.includes('rain')) {
-          insights.push({ icon: '🌧️', text: 'Rain detected/expected. Skip watering - soil moisture will naturally increase.', confidence: 92 });
+          insights.push({ icon: '🌧️', text: 'Rain expected. Do NOT water — Snake Plants only need watering every 1-2 weeks and hate wet soil.', confidence: 95 });
         }
         if (weather.temp > 35) {
-          insights.push({ icon: '☀️', text: 'High outdoor temperature. Expect faster soil moisture evaporation.', confidence: 88 });
+          insights.push({ icon: '☀️', text: 'High outdoor temperature. Move away from direct sun to prevent leaf burn.', confidence: 88 });
         }
-        if (weather.humidity > 80) {
-          insights.push({ icon: '💨', text: 'High humidity detected. Reduce watering frequency to prevent root issues.', confidence: 82 });
+        if (weather.humidity > 60) {
+          insights.push({ icon: '💨', text: 'High humidity detected. Snake Plants prefer 30-50% humidity — ensure good air circulation.', confidence: 82 });
         }
       }
       if (cycle.detected) {
         insights.push({ icon: '🔄', text: `Daily pattern detected: Temperature peaks around ${cycle.peakHour}:00 and dips around ${cycle.lowHour}:00.`, confidence: 75 });
       }
       if (anomaly.isAnomaly) {
-        insights.push({ icon: '⚠️', text: 'Unusual reading detected! Current values deviate significantly from normal patterns.', confidence: 90 });
+        insights.push({ icon: '⚠️', text: 'Unusual reading detected! Values deviate significantly from normal patterns.', confidence: 90 });
       }
-      if (latest.soil >= 50 && latest.soil <= 70 && latest.temp >= 24 && latest.temp <= 30) {
-        insights.push({ icon: '✅', text: 'Current conditions are optimal. Plant is in ideal environment based on historical patterns.', confidence: 95 });
+      // Optimal: dry-ish soil, indirect light, moderate temp
+      if (latest.soil >= 10 && latest.soil <= 40 && latest.temp >= 18 && latest.temp <= 29 && latest.light >= 10 && latest.light <= 80) {
+        insights.push({ icon: '✅', text: 'Perfect conditions for your Bird\'s Nest Snake Plant! Dry soil, indirect light, and comfortable temperature.', confidence: 95 });
       }
       if (readings.length >= 20) {
         const soilTrend = detectTrend(readings.slice(-20).map(r => r.soil));
-        if (soilTrend.slope < -1) {
-          const hoursUntilDry = Math.abs((latest.soil - 30) / (soilTrend.slope * 4));
-          if (hoursUntilDry < 24) {
-            insights.push({ icon: '⏰', text: `ML predicts soil will reach critical dryness in ~${hoursUntilDry.toFixed(0)} hours.`, confidence: 70 });
+        if (soilTrend.slope < -0.5) {
+          const hoursUntilDry = Math.abs((latest.soil - 10) / (soilTrend.slope * 4));
+          if (hoursUntilDry < 48) {
+            insights.push({ icon: '⏰', text: `Soil drying naturally — will need water in ~${hoursUntilDry.toFixed(0)} hours. Perfect for Snake Plant!`, confidence: 70 });
           }
         }
       }
-      return insights.length > 0 ? insights : [{ icon: '📊', text: 'Collecting more data to improve predictions. Keep the sensors running for better analysis.', confidence: 50 }];
+      // Snake Plant care reminder
+      if (latest.soil >= 10 && latest.soil <= 30) {
+        insights.push({ icon: '🪴', text: 'Bird\'s Nest Snake Plant reminder: Water only when soil is below 10%. These plants thrive on neglect!', confidence: 90 });
+      }
+      return insights.length > 0 ? insights : [{ icon: '📊', text: 'Collecting data for your Snake Plant. Keep sensors running for better analysis.', confidence: 50 }];
     }
   // deno-lint-ignore no-explicit-any
   const [tempData, setTempData] = useState<any>(null);
@@ -299,11 +316,11 @@ const Dashboard = () => {
         const avgLight = lights.reduce((a: number, b: number) => a + b, 0) / lights.length;
         const avgHumidity = humidity.reduce((a: number, b: number) => a + b, 0) / humidity.length;
         const radarScores = {
-          "Temp Balance": Math.max(0, 100 - Math.abs(avgTemp - 27) * 5),
-          "Soil Health": avgSoil >= 30 && avgSoil <= 80 ? 90 : 50,
-          "Light Level": Math.min(100, avgLight),
-          "Humidity": avgHumidity >= 40 && avgHumidity <= 80 ? 90 : 60,
-          "Consistency": 85 // Based on variance
+          "Temp Balance": Math.max(0, 100 - Math.abs(avgTemp - 22) * 4),
+          "Soil Health": avgSoil <= 40 ? 90 : avgSoil <= 50 ? 70 : 30,
+          "Light Level": avgLight >= 10 && avgLight <= 80 ? 90 : 50,
+          "Humidity": avgHumidity >= 30 && avgHumidity <= 50 ? 90 : avgHumidity <= 60 ? 70 : 50,
+          "Consistency": 85
         };
         setRadarData({
           labels: Object.keys(radarScores),
@@ -373,6 +390,93 @@ const Dashboard = () => {
   const [predWatering, setPredWatering] = useState<string>("--");
   const [predWateringReason, setPredWateringReason] = useState<string>("--");
   const [predictionChartData, setPredictionChartData] = useState<any>(null);
+
+  // Daily averages (past 7 days)
+  const [dailyAverages, setDailyAverages] = useState<any[]>([]);
+  // Weekly health averages (past 7 weeks)
+  const [weeklyHealthAverages, setWeeklyHealthAverages] = useState<any[]>([]);
+
+  // Helper to compute health score from a single reading (Snake Plant)
+  function computeHealth(r: any) {
+    let score = 100;
+    if (r.soil > 50) score -= 35;
+    else if (r.soil < 10) score -= 10;
+    if (r.temp > 35) score -= 25;
+    else if (r.temp < 10) score -= 30;
+    else if (r.temp < 15) score -= 15;
+    else if (r.temp > 29) score -= 5;
+    if (r.light < 5) score -= 15;
+    else if (r.light > 90) score -= 10;
+    if (r.humidity > 60) score -= 10;
+    return Math.max(0, score);
+  }
+
+  // Fetch historical data for daily & weekly averages
+  useEffect(() => {
+    const fetchHistorical = async () => {
+      // --- Daily averages: past 7 days ---
+      const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: weekData } = await supabase
+        .from('readings')
+        .select('timestamp,temp,soil,light,humidity')
+        .gte('timestamp', since7d)
+        .order('timestamp', { ascending: true });
+
+      if (weekData && weekData.length > 0) {
+        const clamped = weekData.map(clampReading);
+        // Group by date string
+        const byDay: Record<string, any[]> = {};
+        clamped.forEach((r: any) => {
+          const day = new Date(r.timestamp).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+          if (!byDay[day]) byDay[day] = [];
+          byDay[day].push(r);
+        });
+        const dailyAvg = Object.entries(byDay).map(([day, readings]) => ({
+          day,
+          temp: (readings.reduce((s: number, r: any) => s + r.temp, 0) / readings.length).toFixed(1),
+          soil: (readings.reduce((s: number, r: any) => s + r.soil, 0) / readings.length).toFixed(0),
+          light: (readings.reduce((s: number, r: any) => s + r.light, 0) / readings.length).toFixed(0),
+          humidity: (readings.reduce((s: number, r: any) => s + r.humidity, 0) / readings.length).toFixed(0),
+          count: readings.length
+        }));
+        setDailyAverages(dailyAvg);
+      }
+
+      // --- Weekly health: past 7 weeks ---
+      const since7w = new Date(Date.now() - 49 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: monthData } = await supabase
+        .from('readings')
+        .select('timestamp,temp,soil,light,humidity')
+        .gte('timestamp', since7w)
+        .order('timestamp', { ascending: true });
+
+      if (monthData && monthData.length > 0) {
+        const clamped = monthData.map(clampReading);
+        // Group by ISO week
+        const byWeek: Record<string, any[]> = {};
+        clamped.forEach((r: any) => {
+          const d = new Date(r.timestamp);
+          const startOfWeek = new Date(d);
+          startOfWeek.setDate(d.getDate() - d.getDay());
+          const weekLabel = startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          if (!byWeek[weekLabel]) byWeek[weekLabel] = [];
+          byWeek[weekLabel].push(r);
+        });
+        const weeklyAvg = Object.entries(byWeek).map(([week, readings]) => {
+          const avgHealth = readings.reduce((s: number, r: any) => s + computeHealth(r), 0) / readings.length;
+          return {
+            week: `Week of ${week}`,
+            health: Math.round(avgHealth),
+            avgTemp: (readings.reduce((s: number, r: any) => s + r.temp, 0) / readings.length).toFixed(1),
+            avgSoil: (readings.reduce((s: number, r: any) => s + r.soil, 0) / readings.length).toFixed(0),
+            count: readings.length
+          };
+        });
+        setWeeklyHealthAverages(weeklyAvg);
+      }
+    };
+    fetchHistorical();
+  }, [supabase, sensorReadings]); // Re-fetch when new readings arrive
 
   // Define a type for sensor readings
   type SensorReading = {
@@ -446,17 +550,21 @@ const Dashboard = () => {
 
             let score = 100;
             const tips: Array<{text: string, type: string}> = [];
-            if (latest.soil < 30) { score -= 30; tips.push({ text: "🚨 Water your plant!", type: "critical" }); }
-            else if (latest.soil > 80) { score -= 20; tips.push({ text: "💦 Reduce watering", type: "warning" }); }
-            else if (latest.soil <= 50) { score -= 5; tips.push({ text: "💧 Soil moisture moderate", type: "warning" }); }
-            else { tips.push({ text: "💧 Soil moisture optimal", type: "good" }); }
+            // Snake Plant: dry soil is GOOD, wet soil is BAD
+            if (latest.soil > 50) { score -= 35; tips.push({ text: "🚨 Too wet! Risk of root rot — don't water!", type: "critical" }); }
+            else if (latest.soil < 10) { score -= 10; tips.push({ text: "💧 Time to water (once every 1-2 weeks)", type: "warning" }); }
+            else if (latest.soil <= 40) { tips.push({ text: "🪴 Soil perfectly dry — Snake Plant happy!", type: "good" }); }
+            else { tips.push({ text: "💧 Soil moist — skip watering for now", type: "good" }); }
             if (latest.temp > 35) { score -= 25; tips.push({ text: "🔥 Too hot!", type: "critical" }); }
-            else if (latest.temp < 18) { score -= 20; tips.push({ text: "❄️ Too cold!", type: "warning" }); }
-            else { tips.push({ text: "🌡️ Temperature ideal", type: "good" }); }
-            if (latest.light < 10) { score -= 15; tips.push({ text: "🌑 More light needed", type: "warning" }); }
-            else if (latest.light > 90) { score -= 10; tips.push({ text: "☀️ Very bright", type: "warning" }); }
-            if (latest.humidity > 85) { score -= 15; tips.push({ text: "🌫️ High humidity", type: "warning" }); }
-            else if (latest.humidity < 40) { score -= 10; tips.push({ text: "🏜️ Low humidity", type: "warning" }); }
+            else if (latest.temp < 10) { score -= 30; tips.push({ text: "❄️ Dangerously cold!", type: "critical" }); }
+            else if (latest.temp < 15) { score -= 15; tips.push({ text: "❄️ A bit cold for Snake Plant", type: "warning" }); }
+            else if (latest.temp >= 15 && latest.temp <= 29) { tips.push({ text: "🌡️ Temperature ideal (15-29°C)", type: "good" }); }
+            else { score -= 5; tips.push({ text: "🌡️ Warm but tolerable", type: "warning" }); }
+            if (latest.light < 5) { score -= 15; tips.push({ text: "🌑 Too dark — needs some indirect light", type: "warning" }); }
+            else if (latest.light > 90) { score -= 10; tips.push({ text: "☀️ Too much direct sun — move to shade", type: "warning" }); }
+            else if (latest.light >= 10 && latest.light <= 80) { tips.push({ text: "💡 Light level perfect", type: "good" }); }
+            if (latest.humidity > 60) { score -= 10; tips.push({ text: "🌫️ Humidity too high (prefers 30-50%)", type: "warning" }); }
+            else if (latest.humidity >= 30 && latest.humidity <= 50) { tips.push({ text: "💨 Humidity ideal", type: "good" }); }
             score = Math.max(0, score);
             setHealthScore(`${score}%`);
             setHealthBarFill(`${score}%`);
@@ -599,19 +707,23 @@ const Dashboard = () => {
             predictedTemp = `${Math.round(latest.temp + tempDelta)}°C`;
             predictedTempSource = weatherLocal ? `Trend + Weather (${weatherTemp}°C)` : `Trend-only prediction`;
 
-            // Predict soil % — rain adds ~2% boost
-            predictedSoil = `${Math.min(100, Math.max(0, Math.round(latest.soil + soilDelta + (rain ? 2 : 0))))}%`;
-            predictedSoilSource = rain ? "Rain expected: soil moisture will increase" : "Trend-based prediction";
+            // Predict soil % — Snake Plant: rain barely matters since it's indoors
+            predictedSoil = `${Math.min(100, Math.max(0, Math.round(latest.soil + soilDelta + (rain ? 1 : 0))))}%`;
+            predictedSoilSource = rain ? "Rain expected (minimal indoor impact)" : "Trend-based prediction";
 
+            // Snake Plant: only water when soil < 10%, and only every 1-2 weeks
             if (rain) {
-              predictedWatering = "Skip";
-              predictedWateringReason = "Rain detected/expected";
-            } else if (parseInt(predictedSoil) < 30) {
+              predictedWatering = "No";
+              predictedWateringReason = "Snake Plants barely need water — skip";
+            } else if (parseInt(predictedSoil) < 10) {
               predictedWatering = "Yes";
-              predictedWateringReason = "Predicted soil dry";
+              predictedWateringReason = "Soil very dry — water lightly";
+            } else if (parseInt(predictedSoil) > 40) {
+              predictedWatering = "No!";
+              predictedWateringReason = "Soil still moist — overwatering causes root rot";
             } else {
               predictedWatering = "No";
-              predictedWateringReason = "Soil moisture sufficient";
+              predictedWateringReason = "Soil drying naturally — Snake Plants prefer this";
             }
 
             // Prediction chart for next 6 hours
@@ -919,6 +1031,7 @@ const Dashboard = () => {
                   temp_high: "🔥",
                   temp_low: "❄️",
                   light_low: "🌑",
+                  light_high: "☀️",
                   humidity_high: "🌫️",
                   humidity_low: "🏜️",
                   // ESP32 human-readable format mappings
@@ -928,7 +1041,8 @@ const Dashboard = () => {
                   "Temp too low": "❄️",
                   "Low light": "🌑",
                   "High humidity": "🌫️",
-                  "Low humidity": "🏜️"
+                  "Low humidity": "🏜️",
+                  "Plant Alert": "🚨"
                 };
                 const severity = alert.severity || "info";
                 const type = alert.type || "unknown";
@@ -1005,6 +1119,71 @@ const Dashboard = () => {
                 }
               }}
             />
+          )}
+        </div>
+
+        {/* Daily Averages (Past 7 Days) */}
+        <div className="card">
+          <h3>📅 Daily Averages (Past 7 Days)</h3>
+          {dailyAverages.length > 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', color: '#94a3b8' }}>Day</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', color: '#f87171' }}>🌡️ Temp</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', color: '#22d3ee' }}>💧 Soil</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', color: '#fbbf24' }}>💡 Light</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', color: '#a78bfa' }}>💨 Hum</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', color: '#94a3b8' }}>Readings</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dailyAverages.map((d, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <td style={{ padding: '8px 12px', color: '#e2e8f0' }}>{d.day}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', color: '#f87171' }}>{d.temp}°C</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', color: '#22d3ee' }}>{d.soil}%</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', color: '#fbbf24' }}>{d.light}%</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', color: '#a78bfa' }}>{d.humidity}%</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', color: '#94a3b8' }}>{d.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p style={{ color: '#94a3b8', textAlign: 'center', padding: 16 }}>No data yet — daily averages will appear as readings accumulate.</p>
+          )}
+        </div>
+
+        {/* Weekly Health Averages (Past 7 Weeks) */}
+        <div className="card">
+          <h3>📊 Weekly Health Overview (Past 7 Weeks)</h3>
+          {weeklyHealthAverages.length > 0 ? (
+            <div>
+              {weeklyHealthAverages.map((w, idx) => {
+                const color = w.health > 70 ? '#4ade80' : w.health > 40 ? '#fbbf24' : '#f87171';
+                return (
+                  <div key={idx} style={{ marginBottom: 12, padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{w.week}</span>
+                      <span style={{ color, fontWeight: 700, fontSize: '1.1rem' }}>{w.health}%</span>
+                    </div>
+                    <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${w.health}%`, background: color, borderRadius: 4, transition: 'width 0.5s ease' }}></div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: '0.8rem', color: '#94a3b8' }}>
+                      <span>🌡️ {w.avgTemp}°C avg</span>
+                      <span>💧 {w.avgSoil}% soil avg</span>
+                      <span>📈 {w.count} readings</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p style={{ color: '#94a3b8', textAlign: 'center', padding: 16 }}>No weekly data yet — health trends will appear after a few weeks of monitoring.</p>
           )}
         </div>
 
