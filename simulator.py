@@ -45,11 +45,11 @@ class SimulationMode(Enum):
 
 @dataclass
 class SensorThresholds:
-    """Defines healthy ranges for each sensor"""
-    soil_min: int = 1800
-    soil_max: int = 2600
-    light_min: int = 800
-    light_max: int = 1800
+    """Defines healthy ranges for each sensor (all values as percentages to match ESP32)"""
+    soil_min: int = 20
+    soil_max: int = 60
+    light_min: int = 10
+    light_max: int = 80
     temp_min: float = 24.0
     temp_max: float = 35.0
     humidity_min: float = 40.0
@@ -84,20 +84,20 @@ class SensorSimulator:
             return self._generate_normal_reading()
     
     def _generate_normal_reading(self) -> Dict[str, Any]:
-        """Normal healthy plant conditions"""
+        """Normal healthy plant conditions (percentage values matching ESP32)"""
         return {
-            "soil": random.randint(2000, 2400),
-            "light": random.randint(1000, 1500),
+            "soil": random.randint(25, 45),
+            "light": random.randint(30, 70),
             "temp": round(random.uniform(26, 30), 1),
             "humidity": round(random.uniform(50, 70), 1)
         }
     
     def _generate_dry_soil_reading(self) -> Dict[str, Any]:
         """Simulates drought - soil moisture decreasing over time"""
-        base_soil = max(1200, 2400 - (self._reading_count * 50))
+        base_soil = max(2, 40 - (self._reading_count * 2))
         return {
-            "soil": random.randint(base_soil - 100, base_soil + 100),
-            "light": random.randint(1200, 1600),
+            "soil": random.randint(max(0, base_soil - 3), min(100, base_soil + 3)),
+            "light": random.randint(40, 75),
             "temp": round(random.uniform(30, 34), 1),
             "humidity": round(random.uniform(35, 50), 1)
         }
@@ -105,8 +105,8 @@ class SensorSimulator:
     def _generate_hot_weather_reading(self) -> Dict[str, Any]:
         """Simulates heat wave conditions"""
         return {
-            "soil": random.randint(1600, 2000),
-            "light": random.randint(1500, 1800),
+            "soil": random.randint(10, 30),
+            "light": random.randint(75, 95),
             "temp": round(random.uniform(34, 40), 1),
             "humidity": round(random.uniform(30, 45), 1)
         }
@@ -114,8 +114,8 @@ class SensorSimulator:
     def _generate_night_reading(self) -> Dict[str, Any]:
         """Simulates nighttime conditions"""
         return {
-            "soil": random.randint(2000, 2400),
-            "light": random.randint(0, 200),
+            "soil": random.randint(25, 45),
+            "light": random.randint(0, 5),
             "temp": round(random.uniform(20, 25), 1),
             "humidity": round(random.uniform(60, 80), 1)
         }
@@ -143,29 +143,29 @@ class SensorSimulator:
         
         chosen_alert = random.choice(alert_types)
         
-        # Start with normal values
+        # Start with normal values (percentage-based to match ESP32)
         reading = {
-            "soil": random.randint(20000, 24000),
-            "light": random.randint(1000, 1500),
+            "soil": random.randint(25, 45),
+            "light": random.randint(30, 70),
             "temp": round(random.uniform(26, 30), 1),
             "humidity": round(random.uniform(50, 70), 1)
         }
         
-        # Override with alert-triggering value
+        # Override with alert-triggering value (percentage-based to match ESP32)
         if chosen_alert == "soil_dry":
-            reading["soil"] = random.randint(1000, 1700)  # Below 1800 threshold
+            reading["soil"] = random.randint(0, 8)  # Below 10% threshold
         elif chosen_alert == "soil_wet":
-            reading["soil"] = random.randint(2700, 3500)  # Above 2600 threshold
+            reading["soil"] = random.randint(85, 100)  # Above 80% threshold
         elif chosen_alert == "temp_high":
             reading["temp"] = round(random.uniform(36, 42), 1)  # Above 35 threshold
         elif chosen_alert == "temp_low":
             reading["temp"] = round(random.uniform(8, 14), 1)  # Below 15 threshold
         elif chosen_alert == "light_low":
-            reading["light"] = random.randint(100, 450)  # Below 500 threshold
+            reading["light"] = random.randint(0, 4)  # Below 5% threshold
         elif chosen_alert == "humidity_high":
-            reading["humidity"] = round(random.uniform(86, 95), 1)  # Above 85 threshold
+            reading["humidity"] = round(random.uniform(82, 95), 1)  # Above 80% threshold
         elif chosen_alert == "humidity_low":
-            reading["humidity"] = round(random.uniform(20, 34), 1)  # Below 35 threshold
+            reading["humidity"] = round(random.uniform(15, 28), 1)  # Below 30% threshold
         
         print(f"  ⚡ ALERT TEST: Triggering '{chosen_alert}' alert!")
         reading["_alert_type"] = chosen_alert  # Store alert type for later use
@@ -273,22 +273,22 @@ def get_health_status(data: Dict[str, Any]) -> str:
     """Analyze reading and return health status"""
     issues = []
     
-    if data['soil'] < 1800:
+    if data['soil'] < 10:
         issues.append("🚨 Soil too dry!")
-    elif data['soil'] > 2600:
+    elif data['soil'] > 80:
         issues.append("💦 Soil too wet!")
     
     if data['temp'] > 35:
         issues.append("🔥 Too hot!")
-    elif data['temp'] < 20:
+    elif data['temp'] < 15:
         issues.append("❄️ Too cold!")
     
-    if data['light'] < 500:
+    if data['light'] < 5:
         issues.append("🌑 Low light!")
     
-    if data['humidity'] < 40:
+    if data['humidity'] < 30:
         issues.append("🏜️ Low humidity!")
-    elif data['humidity'] > 80:
+    elif data['humidity'] > 60:
         issues.append("🌫️ High humidity!")
     
     return " | ".join(issues) if issues else "✅ Plant healthy!"

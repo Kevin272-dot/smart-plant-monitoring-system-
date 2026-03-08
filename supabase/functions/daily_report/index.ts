@@ -99,10 +99,10 @@ function analyzeDailyData(readings: SensorReading[]): DailyStats {
 function generateHealthAlerts(stats: DailyStats): string[] {
   const alerts: string[] = [];
 
-  // Soil moisture
-  if (stats.soil.avg < 1800) {
-    alerts.push("🚨 Soil consistently dry — increase watering frequency!");
-  } else if (stats.soil.avg > 2600) {
+  // Soil moisture (percentage-based: ESP32 sends 0-100%)
+  if (stats.soil.avg < 10) {
+    alerts.push("🚨 Soil consistently dry — time to water!");
+  } else if (stats.soil.avg > 80) {
     alerts.push("⚠️ Soil too wet — reduce watering to prevent root rot.");
   } else if (stats.soil.trend === "falling") {
     alerts.push("📉 Soil moisture declining — consider watering soon.");
@@ -117,17 +117,17 @@ function generateHealthAlerts(stats: DailyStats): string[] {
     alerts.push("📈 Temperature trending upward — monitor for heat stress.");
   }
 
-  // Light
-  if (stats.light.avg < 500) {
+  // Light (percentage-based: ESP32 sends 0-100%)
+  if (stats.light.avg < 5) {
     alerts.push("🌑 Insufficient light exposure — move to brighter location.");
-  } else if (stats.light.avg > 1600) {
+  } else if (stats.light.avg > 90) {
     alerts.push("☀️ High light intensity — ensure no direct harsh sunlight.");
   }
 
-  // Humidity
-  if (stats.humidity.avg > 85) {
+  // Humidity (percentage-based)
+  if (stats.humidity.avg > 80) {
     alerts.push("🌫️ High humidity — watch for fungal diseases.");
-  } else if (stats.humidity.avg < 40) {
+  } else if (stats.humidity.avg < 30) {
     alerts.push("🏜️ Low humidity — consider misting or humidifier.");
   }
 
@@ -309,19 +309,27 @@ serve(async (req: Request) => {
   // Generate report
   const report = generateReport(stats, healthAlerts, weather, city);
 
-  // Send to webhook
-  const webhookUrl = Deno.env.get("EMAIL_WEBHOOK_URL") ?? Deno.env.get("SLACK_WEBHOOK_URL");
-  if (!webhookUrl) {
+  // Send report via Twilio SMS
+  const TWILIO_SID = Deno.env.get("TWILIO_SID");
+  const TWILIO_TOKEN = Deno.env.get("TWILIO_TOKEN");
+  const TWILIO_FROM = Deno.env.get("TWILIO_FROM");
+  const TWILIO_TO = Deno.env.get("TWILIO_TO");
+  if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM || !TWILIO_TO) {
     return new Response(
-      JSON.stringify({ error: "No webhook URL configured" }),
+      JSON.stringify({ error: "No Twilio credentials configured" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  const webhookResponse = await fetch(webhookUrl, {
+  const smsUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`;
+  const credentials = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`);
+  const webhookResponse = await fetch(smsUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: report }),
+    headers: {
+      "Authorization": `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: `From=${encodeURIComponent(TWILIO_FROM)}&To=${encodeURIComponent(TWILIO_TO)}&Body=${encodeURIComponent(report)}`,
   });
 
   return new Response(

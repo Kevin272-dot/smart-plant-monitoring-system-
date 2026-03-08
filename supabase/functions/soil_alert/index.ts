@@ -4,6 +4,7 @@
  * Monitors sensor readings and triggers alerts when thresholds are exceeded.
  * Features cooldown mechanism to prevent alert spam.
  */
+// deno-lint-ignore-file
 
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -32,13 +33,13 @@ interface AlertThresholds {
 }
 
 const THRESHOLDS: AlertThresholds = {
-  soil_dry: 1800,      // Below = too dry
-  soil_wet: 2600,      // Above = too wet
+  soil_dry: 10,        // Below 10% = too dry (ESP32 sends 0-100%)
+  soil_wet: 80,        // Above 80% = too wet (Snake Plant prefers dry)
   temp_high: 35,       // Above = too hot
   temp_low: 15,        // Below = too cold
-  light_low: 500,      // Below = insufficient light
-  humidity_high: 85,   // Above = fungal risk
-  humidity_low: 35,    // Below = too dry air
+  light_low: 5,        // Below 5% = insufficient light
+  humidity_high: 80,   // Above 80% = too humid for Snake Plant
+  humidity_low: 30,    // Below 30% = too dry air
 };
 
 const COOLDOWN_MINUTES = 30;  // Minimum time between same alert type
@@ -62,8 +63,8 @@ function analyzeReading(reading: SensorReading): Alert[] {
   if (reading.soil < THRESHOLDS.soil_dry) {
     alerts.push({
       type: "soil_dry",
-      severity: reading.soil < THRESHOLDS.soil_dry - 200 ? "critical" : "warning",
-      message: "🚨 Soil too dry — water your plant immediately!",
+      severity: reading.soil < 5 ? "critical" : "warning",
+      message: "🚨 Soil too dry — water your Snake Plant!",
       value: reading.soil,
       threshold: THRESHOLDS.soil_dry,
     });
@@ -152,37 +153,44 @@ async function isAlertOnCooldown(
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// NOTIFICATION
+// NOTIFICATION (Twilio SMS)
 // ═══════════════════════════════════════════════════════════════════
 
-async function sendSlackNotification(
-  webhookUrl: string,
+async function sendTwilioSMS(
+  accountSid: string,
+  authToken: string,
+  from: string,
+  to: string,
   alerts: Alert[],
   reading: SensorReading
 ): Promise<boolean> {
-  const severityEmoji = {
+  const severityEmoji: Record<string, string> = {
     critical: "🚨",
     warning: "⚠️",
     info: "ℹ️",
   };
 
   const alertMessages = alerts
-    .map((a) => `${severityEmoji[a.severity]} *${a.type}*: ${a.message}\n   └ Value: ${a.value} (threshold: ${a.threshold})`)
-    .join("\n\n");
+    .map((a) => `${severityEmoji[a.severity]} ${a.type}: ${a.message}`)
+    .join("\n");
 
-  const payload = {
-    text: `🌱 *Plant Alert*\n\n${alertMessages}\n\n📊 *Current Readings:*\n• Soil: ${reading.soil}\n• Temp: ${reading.temp}°C\n• Light: ${reading.light}\n• Humidity: ${reading.humidity}%\n\n🕐 ${new Date().toLocaleString()}`,
-  };
+  const body = `🌱 Plant Alert\n\n${alertMessages}\n\nReadings: Soil ${reading.soil}% | Temp ${reading.temp}°C | Light ${reading.light}% | Humidity ${reading.humidity}%`;
+
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const credentials = btoa(`${accountSid}:${authToken}`);
 
   try {
-    const response = await fetch(webhookUrl, {
+    const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      headers: {
+        "Authorization": `Basic ${credentials}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: `From=${encodeURIComponent(from)}&To=${encodeURIComponent(to)}&Body=${encodeURIComponent(body)}`,
     });
     return response.ok;
   } catch {
-    console.error("Failed to send Slack notification");
+    console.error("Failed to send Twilio SMS");
     return false;
   }
 }
@@ -205,7 +213,10 @@ serve(async (req: Request) => {
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("PROJECT_URL");
   const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY");
-  const SLACK_WEBHOOK = Deno.env.get("SLACK_WEBHOOK_URL") ?? Deno.env.get("EMAIL_WEBHOOK_URL");
+  const TWILIO_SID = Deno.env.get("TWILIO_SID");
+  const TWILIO_TOKEN = Deno.env.get("TWILIO_TOKEN");
+  const TWILIO_FROM = Deno.env.get("TWILIO_FROM");
+  const TWILIO_TO = Deno.env.get("TWILIO_TO");
 
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
     return new Response(
@@ -266,10 +277,10 @@ serve(async (req: Request) => {
     loggedAlerts.push(alert.type);
   }
 
-  // Send Slack notification if there are active alerts
+  // Send Twilio SMS if there are active alerts
   let notificationSent = false;
-  if (activeAlerts.length > 0 && SLACK_WEBHOOK) {
-    notificationSent = await sendSlackNotification(SLACK_WEBHOOK, activeAlerts, reading);
+  if (activeAlerts.length > 0 && TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM && TWILIO_TO) {
+    notificationSent = await sendTwilioSMS(TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM, TWILIO_TO, activeAlerts, reading);
   }
 
   // Return response

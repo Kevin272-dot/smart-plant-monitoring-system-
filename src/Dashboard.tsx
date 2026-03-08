@@ -84,7 +84,7 @@ function detectLocalAlerts(readings: any[]) {
       triggered_at: ts,
       message: "Soil is very dry — time to water your Snake Plant."
     });
-  } else if (last.soil > 50) {
+  } else if (last.soil > 80) {
     alerts.push({
       type: "soil_wet",
       severity: "critical",
@@ -129,7 +129,7 @@ function detectLocalAlerts(readings: any[]) {
       message: "Intense direct sunlight — move to indirect light to avoid leaf burn."
     });
   }
-  if (last.humidity > 60) {
+  if (last.humidity > 80) {
     alerts.push({
       type: "humidity_high",
       severity: "warning",
@@ -249,7 +249,7 @@ const Dashboard = () => {
       if (trend.direction === 'falling' && latest.soil < 15) {
         insights.push({ icon: '💧', text: 'Soil is drying out. Snake Plants like dry soil, but consider watering within 1-2 days if soil drops below 10%.', confidence: 80 });
       }
-      if (latest.soil > 50) {
+      if (latest.soil > 80) {
         insights.push({ icon: '🚨', text: 'Soil is too wet! Snake Plants are drought-tolerant — overwatering causes root rot. Let soil dry completely before watering again.', confidence: 95 });
       }
       if (trend.direction === 'rising' && latest.temp > 30) {
@@ -262,7 +262,7 @@ const Dashboard = () => {
         if (weather.temp > 35) {
           insights.push({ icon: '☀️', text: 'High outdoor temperature. Move away from direct sun to prevent leaf burn.', confidence: 88 });
         }
-        if (weather.humidity > 60) {
+        if (weather.humidity > 80) {
           insights.push({ icon: '💨', text: 'High humidity detected. Snake Plants prefer 30-50% humidity — ensure good air circulation.', confidence: 82 });
         }
       }
@@ -317,9 +317,9 @@ const Dashboard = () => {
         const avgHumidity = humidity.reduce((a: number, b: number) => a + b, 0) / humidity.length;
         const radarScores = {
           "Temp Balance": Math.max(0, 100 - Math.abs(avgTemp - 22) * 4),
-          "Soil Health": avgSoil <= 40 ? 90 : avgSoil <= 50 ? 70 : 30,
+          "Soil Health": avgSoil <= 40 ? 90 : avgSoil <= 80 ? 70 : 30,
           "Light Level": avgLight >= 10 && avgLight <= 80 ? 90 : 50,
-          "Humidity": avgHumidity >= 30 && avgHumidity <= 50 ? 90 : avgHumidity <= 60 ? 70 : 50,
+          "Humidity": avgHumidity >= 30 && avgHumidity <= 50 ? 90 : avgHumidity <= 80 ? 70 : 50,
           "Consistency": 85
         };
         setRadarData({
@@ -399,7 +399,7 @@ const Dashboard = () => {
   // Helper to compute health score from a single reading (Snake Plant)
   function computeHealth(r: any) {
     let score = 100;
-    if (r.soil > 50) score -= 35;
+    if (r.soil > 80) score -= 35;
     else if (r.soil < 10) score -= 10;
     if (r.temp > 35) score -= 25;
     else if (r.temp < 10) score -= 30;
@@ -407,7 +407,7 @@ const Dashboard = () => {
     else if (r.temp > 29) score -= 5;
     if (r.light < 5) score -= 15;
     else if (r.light > 90) score -= 10;
-    if (r.humidity > 60) score -= 10;
+    if (r.humidity > 80) score -= 10;
     return Math.max(0, score);
   }
 
@@ -551,7 +551,7 @@ const Dashboard = () => {
             let score = 100;
             const tips: Array<{text: string, type: string}> = [];
             // Snake Plant: dry soil is GOOD, wet soil is BAD
-            if (latest.soil > 50) { score -= 35; tips.push({ text: "🚨 Too wet! Risk of root rot — don't water!", type: "critical" }); }
+            if (latest.soil > 80) { score -= 35; tips.push({ text: "🚨 Too wet! Risk of root rot — don't water!", type: "critical" }); }
             else if (latest.soil < 10) { score -= 10; tips.push({ text: "💧 Time to water (once every 1-2 weeks)", type: "warning" }); }
             else if (latest.soil <= 40) { tips.push({ text: "🪴 Soil perfectly dry — Snake Plant happy!", type: "good" }); }
             else { tips.push({ text: "💧 Soil moist — skip watering for now", type: "good" }); }
@@ -563,7 +563,7 @@ const Dashboard = () => {
             if (latest.light < 5) { score -= 15; tips.push({ text: "🌑 Too dark — needs some indirect light", type: "warning" }); }
             else if (latest.light > 90) { score -= 10; tips.push({ text: "☀️ Too much direct sun — move to shade", type: "warning" }); }
             else if (latest.light >= 10 && latest.light <= 80) { tips.push({ text: "💡 Light level perfect", type: "good" }); }
-            if (latest.humidity > 60) { score -= 10; tips.push({ text: "🌫️ Humidity too high (prefers 30-50%)", type: "warning" }); }
+            if (latest.humidity > 80) { score -= 10; tips.push({ text: "🌫️ Humidity too high (prefers 30-50%)", type: "warning" }); }
             else if (latest.humidity >= 30 && latest.humidity <= 50) { tips.push({ text: "💨 Humidity ideal", type: "good" }); }
             score = Math.max(0, score);
             setHealthScore(`${score}%`);

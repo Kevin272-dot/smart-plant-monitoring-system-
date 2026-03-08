@@ -1291,13 +1291,13 @@
     // LOCAL ALERT DETECTION (Client-side)
     // ═══════════════════════════════════════════════════════════════════
     const ALERT_THRESHOLDS = {
-      soil_dry: 1800,      // Below = too dry
-      soil_wet: 2600,      // Above = too wet
+      soil_dry: 10,        // Below 10% = too dry
+      soil_wet: 80,        // Above 80% = too wet
       temp_high: 35,       // Above = too hot
       temp_low: 15,        // Below = too cold
-      light_low: 500,      // Below = insufficient light
-      humidity_high: 85,   // Above = fungal risk
-      humidity_low: 35,    // Below = too dry air
+      light_low: 5,        // Below 5% = insufficient light
+      humidity_high: 80,   // Above 80% = fungal risk
+      humidity_low: 30,    // Below 30% = too dry air
     };
 
     function detectLocalAlerts(readings) {
