@@ -121,13 +121,6 @@ function detectLocalAlerts(readings: any[]) {
       triggered_at: ts,
       message: "Very low light — Snake Plants tolerate shade but need some light."
     });
-  } else if (last.light > 90) {
-    alerts.push({
-      type: "light_high",
-      severity: "warning",
-      triggered_at: ts,
-      message: "Intense direct sunlight — move to indirect light to avoid leaf burn."
-    });
   }
   if (last.humidity > 80) {
     alerts.push({
@@ -258,9 +251,6 @@ const Dashboard = () => {
       if (weather) {
         if (weather.rain || weather.condition?.includes('rain')) {
           insights.push({ icon: '🌧️', text: 'Rain expected. Do NOT water — Snake Plants only need watering every 1-2 weeks and hate wet soil.', confidence: 95 });
-        }
-        if (weather.temp > 35) {
-          insights.push({ icon: '☀️', text: 'High outdoor temperature. Move away from direct sun to prevent leaf burn.', confidence: 88 });
         }
         if (weather.humidity > 80) {
           insights.push({ icon: '💨', text: 'High humidity detected. Snake Plants prefer 30-50% humidity — ensure good air circulation.', confidence: 82 });
@@ -561,7 +551,6 @@ const Dashboard = () => {
             else if (latest.temp >= 15 && latest.temp <= 29) { tips.push({ text: "🌡️ Temperature ideal (15-29°C)", type: "good" }); }
             else { score -= 5; tips.push({ text: "🌡️ Warm but tolerable", type: "warning" }); }
             if (latest.light < 5) { score -= 15; tips.push({ text: "🌑 Too dark — needs some indirect light", type: "warning" }); }
-            else if (latest.light > 90) { score -= 10; tips.push({ text: "☀️ Too much direct sun — move to shade", type: "warning" }); }
             else if (latest.light >= 10 && latest.light <= 80) { tips.push({ text: "💡 Light level perfect", type: "good" }); }
             if (latest.humidity > 80) { score -= 10; tips.push({ text: "🌫️ Humidity too high (prefers 30-50%)", type: "warning" }); }
             else if (latest.humidity >= 30 && latest.humidity <= 50) { tips.push({ text: "💨 Humidity ideal", type: "good" }); }

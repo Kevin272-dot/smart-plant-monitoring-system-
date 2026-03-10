@@ -120,8 +120,6 @@ function generateHealthAlerts(stats: DailyStats): string[] {
   // Light (percentage-based: ESP32 sends 0-100%)
   if (stats.light.avg < 5) {
     alerts.push("🌑 Insufficient light exposure — move to brighter location.");
-  } else if (stats.light.avg > 90) {
-    alerts.push("☀️ High light intensity — ensure no direct harsh sunlight.");
   }
 
   // Humidity (percentage-based)
@@ -309,37 +307,14 @@ serve(async (req: Request) => {
   // Generate report
   const report = generateReport(stats, healthAlerts, weather, city);
 
-  // Send report via Twilio SMS
-  const TWILIO_SID = Deno.env.get("TWILIO_SID");
-  const TWILIO_TOKEN = Deno.env.get("TWILIO_TOKEN");
-  const TWILIO_FROM = Deno.env.get("TWILIO_FROM");
-  const TWILIO_TO = Deno.env.get("TWILIO_TO");
-  if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM || !TWILIO_TO) {
-    return new Response(
-      JSON.stringify({ error: "No Twilio credentials configured" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  const smsUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`;
-  const credentials = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`);
-  const webhookResponse = await fetch(smsUrl, {
-    method: "POST",
-    headers: {
-      "Authorization": `Basic ${credentials}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: `From=${encodeURIComponent(TWILIO_FROM)}&To=${encodeURIComponent(TWILIO_TO)}&Body=${encodeURIComponent(report)}`,
-  });
-
   return new Response(
     JSON.stringify({
       success: true,
-      message: "Daily report sent successfully",
+      message: "Daily report generated successfully",
+      report,
       stats,
       alerts: healthAlerts,
       weather: weather,
-      webhook_status: webhookResponse.status,
     }),
     {
       status: 200,
