@@ -27,7 +27,7 @@ A cloud-based IoT solution for monitoring plant health using environmental senso
 | 🚨 **Intelligent Alerts** | Smart notifications with cooldown to prevent spam |
 | 📈 **Trend Analysis** | Identify rising/falling patterns in sensor data |
 | 🌦️ **Weather Integration** | Weather-aware watering recommendations |
-| 📱 **Slack Notifications** | Instant alerts via Slack webhooks |
+| 📱 **SMS Notifications** | Instant alerts via Twilio SMS |
 
 ---
 
@@ -40,7 +40,7 @@ A cloud-based IoT solution for monitoring plant health using environmental senso
 └─────────────────┘     │  ┌────────────┐  │     └─────────────────┘
                         │  │ PostgreSQL │  │
                         │  │  Database  │  │     ┌─────────────────┐
-                        │  └────────────┘  │────▶│  Slack Alerts   │
+                        │  └────────────┘  │────▶│   SMS Alerts    │
                         │                  │     └─────────────────┘
                         │  ┌────────────┐  │
                         │  │   Edge     │  │
@@ -58,7 +58,7 @@ A cloud-based IoT solution for monitoring plant health using environmental senso
 - Python 3.8+ (for simulator)
 - Node.js 18+ (for Supabase CLI)
 - Supabase account
-- Slack workspace (optional, for alerts)
+- Twilio account (optional, for SMS alerts)
 
 ### Installation
 
@@ -123,9 +123,11 @@ Create a `.env` file or set these in Supabase Edge Function secrets:
 SUPABASE_URL=https://your-project.supabase.co
 SERVICE_ROLE_KEY=your-service-role-key
 
-# Alert Webhooks
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
-EMAIL_WEBHOOK_URL=https://hooks.slack.com/services/...
+# Twilio SMS Alerts
+TWILIO_ACCOUNT_SID=your-twilio-account-sid
+TWILIO_AUTH_TOKEN=your-twilio-auth-token
+TWILIO_PHONE_FROM=+1234567890
+ALERT_PHONE_TO=+0987654321
 
 # Weather (Optional)
 WEATHER_KEY=your-openweathermap-api-key
@@ -186,7 +188,10 @@ npx supabase functions deploy soil_alert
 npx supabase functions deploy daily_report
 
 # Set secrets
-npx supabase secrets set SLACK_WEBHOOK_URL=your-webhook-url
+npx supabase secrets set TWILIO_ACCOUNT_SID=your-sid
+npx supabase secrets set TWILIO_AUTH_TOKEN=your-token
+npx supabase secrets set TWILIO_PHONE_FROM=+1234567890
+npx supabase secrets set ALERT_PHONE_TO=+0987654321
 npx supabase secrets set WEATHER_KEY=your-api-key
 ```
 
@@ -273,7 +278,7 @@ smart_plant_monitoring_system/
 | Database | PostgreSQL (Supabase) |
 | Backend | Supabase Edge Functions (Deno) |
 | Frontend | HTML5, CSS3, Chart.js |
-| Notifications | Slack Webhooks |
+| Notifications | Twilio SMS |
 | Security | JWT, Row Level Security |
 
 ---
