@@ -12,7 +12,7 @@ _Real-time IoT-based plant health tracking with cloud analytics and SMS alerts_
 
 - Team members 
 - VIT Chennai — 1st Year MDP Project  
-- Tech Stack: ESP32 · Supabase · React · Twilio SMS
+- Tech Stack: ESP32 · DHT22 · Soil Sensor · LDR · OLED · Supabase · React · Twilio SMS
 
 ---
 
@@ -45,13 +45,13 @@ _Real-time IoT-based plant health tracking with cloud analytics and SMS alerts_
 │    SENSOR LAYER       │            │     CLOUD BACKEND        │          │   USER INTERFACE   │
 ├───────────────────────┤            ├──────────────────────────┤          ├────────────────────┤
 │                       │            │                          │          │                    │
-│  ESP32 Microcontroller│  HTTP POST │  Supabase PostgreSQL     │  REST +  │  React Dashboard   │
-│  + DHT22 (Temp/Hum)  │──(30s)────▶│  ┌────────────────────┐ │  SSE     │  ┌──────────────┐  │
-│  + Soil Moisture Sensor│           │  │   readings table   │ │─────────▶│  │ Live Charts  │  │
-│  + LDR (Light)        │           │  │   alerts table      │ │          │  │ Health Score │  │
-│                       │            │  └────────────────────┘ │          │  │ Predictions  │  │
-│  Python Simulator     │            │                          │          │  │ Alerts List  │  │
-│  (5 modes)            │            │  Edge Functions (Deno)   │          │  └──────────────┘  │
+│  ESP32 Dev Board      │  HTTP POST │  Supabase PostgreSQL     │  REST +  │  React Dashboard   │
+│  + DHT22 (Temp/Hum)   │──(30s)────▶│  ┌────────────────────┐ │  SSE     │  ┌──────────────┐  │
+│  + Soil Moisture Probe│            │  │   readings table   │ │─────────▶│  │ Live Charts  │  │
+│  + LDR (Light)        │            │  │   alerts table      │ │          │  │ Health Score │  │
+│  + OLED Display       │            │  └────────────────────┘ │          │  │ Predictions  │  │
+│  Local live display   │            │                          │          │  │ Alerts List  │  │
+│  for on-device status │            │  Edge Functions (Deno)   │          │  └──────────────┘  │
 └───────────────────────┘            │  ┌────────────────────┐ │          └────────────────────┘
                                      │  │ soil_alert         │ │
                                      │  │ daily_report       │ │
@@ -95,8 +95,8 @@ _Real-time IoT-based plant health tracking with cloud analytics and SMS alerts_
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Hardware** | ESP32, DHT22, Soil Sensor, LDR | Collect environmental data |
-| **Simulator** | Python 3.x + `requests` | Simulate sensor readings for testing |
+| **Hardware** | ESP32, DHT22, Soil Sensor, LDR, OLED | Collect and display live environmental data |
+| **Embedded Firmware** | ESP32 Wi-Fi + sensor polling + HTTP client | Read sensors and push real-world values to Supabase |
 | **Database** | Supabase (PostgreSQL) | Cloud storage with real-time subscriptions |
 | **Backend** | Deno Edge Functions | Serverless alert processing & report generation |
 | **Frontend** | React 18 + TypeScript + Vite | Interactive dashboard with live charts |
@@ -214,27 +214,30 @@ Water your Bird's Nest Snake Plant immediately.
 
 ---
 
-## 📌 Slide 11 — Python Simulator
+## 📌 Slide 11 — Hardware Prototype
 
-### Simulation Modes
+### Physical Components
 
-| Mode | Description | Use Case |
-|------|------------|----------|
-| `normal` | Healthy baseline values | Default testing |
-| `dry_soil` | Soil drops to 0–8% | Test drought alerts |
-| `hot_weather` | Temp rises to 34–40°C | Test heat alerts |
-| `night_time` | Light drops to 0–5% | Test low-light alerts |
-| `random` | Fully randomized values | Stress testing |
+| Component | Role in System |
+|-----------|----------------|
+| **ESP32 Dev Board** | Main controller with Wi-Fi connectivity |
+| **DHT22 Sensor** | Measures temperature and humidity |
+| **Soil Moisture Sensor** | Measures soil water content |
+| **LDR / Light Sensor** | Measures ambient light intensity |
+| **OLED Display** | Shows live values and device status locally |
+| **Breadboard + Jumper Wires** | Hardware integration and prototyping |
 
-```bash
-python simulator.py normal       # Healthy plant
-python simulator.py dry_soil     # Triggers soil alerts
-python simulator.py hot_weather  # Triggers temperature alerts
-```
+### Hardware Workflow
 
-- Sends readings every **30 seconds** via HTTP POST
-- Auto-injects test alerts every 10th reading
-- Retry logic (3 attempts) with success rate tracking
+1. Sensors capture real-time environmental values from the plant setup
+2. ESP32 reads each sensor and formats the reading packet
+3. OLED displays current temperature, humidity, soil, and light values
+4. ESP32 uploads readings to Supabase over Wi-Fi at regular intervals
+5. Dashboard and SMS alert pipeline react to real hardware data
+
+- Demonstrates a complete end-to-end IoT prototype, not just simulated input
+- Supports live testing by changing the actual plant environment
+- Useful for classroom demo because both the OLED and dashboard update together
 
 ---
 
@@ -301,12 +304,13 @@ python simulator.py hot_weather  # Triggers temperature alerts
 
 ### Steps to Demo
 
-1. **Start the simulator** — `python simulator.py normal`
-2. **Open the dashboard** — Show live data updating every 30 seconds
-3. **Switch to dry_soil mode** — `python simulator.py dry_soil`
-4. **Watch alerts trigger** — SMS received on phone, alert appears on dashboard
-5. **Show daily report** — Invoke the `daily_report` edge function
-6. **Highlight ML insights** — Trend detection, anomaly detection, health scoring
+1. **Power on the hardware prototype** — ESP32, sensors, and OLED start showing live values
+2. **Explain the sensor board** — Point out DHT22, soil moisture sensor, LDR, OLED, and ESP32 connections
+3. **Open the dashboard** — Show the same real-world readings appearing in the web app
+4. **Change the environment live** — Touch the DHT22, shade the LDR, or vary soil moisture to show sensor response
+5. **Watch alerts trigger** — SMS received on phone and the alert appears on the dashboard
+6. **Show the OLED + cloud sync** — Demonstrate that local display and cloud dashboard stay aligned
+7. **Highlight analytics** — Health score, trends, anomaly detection, and daily report flow
 
 ---
 
@@ -318,7 +322,7 @@ python simulator.py hot_weather  # Triggers temperature alerts
 - **30-minute cooldown** eliminates notification spam
 - **ML predictions** for next-hour temperature and soil moisture
 - **Weather-aware** watering recommendations
-- Successfully tested with **5 simulation scenarios**
+- Successfully validated with **live hardware readings** from the ESP32 sensor board and OLED display
 
 ---
 
