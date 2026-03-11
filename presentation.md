@@ -202,7 +202,7 @@ Water your Bird's Nest Snake Plant immediately.
 - **Trend Detection** — Linear regression on recent values
 - **Daily Cycle Detection** — Hourly pattern analysis (peak/low hours)
 - **Anomaly Detection** — Z-score statistical analysis
-- **AI Insights** — Plant-specific recommendations combining all signals
+- **ML Insights** — Plant-specific recommendations combining all signals
 
 ### 5. Weather Integration
 - Live weather from OpenWeatherMap

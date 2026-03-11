@@ -1209,7 +1209,7 @@ const Dashboard = () => {
             </div>
           </div>
           <div className="ml-insights">
-            <h4>🔍 AI Insights & Recommendations</h4>
+            <h4>🔍 ML Insights & Recommendations</h4>
             <div id="mlInsights">
               {mlInsights.map((insight, idx) => (
                 <div className="insight-item" key={idx}>
