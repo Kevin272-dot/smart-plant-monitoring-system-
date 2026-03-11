@@ -433,6 +433,70 @@ canvas {
    color: #e2e8f0;
 }
 
+.analysis-details {
+   margin-top: 16px;
+   background: rgba(0, 0, 0, 0.18);
+   border-radius: 12px;
+   padding: 16px;
+}
+
+.analysis-details h4 {
+   margin: 0 0 12px 0;
+   font-size: 1rem;
+   color: #e2e8f0;
+}
+
+.analysis-grid {
+   display: grid;
+   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+   gap: 12px;
+}
+
+.analysis-card {
+   background: rgba(255, 255, 255, 0.04);
+   border: 1px solid rgba(255, 255, 255, 0.06);
+   border-radius: 10px;
+   padding: 14px;
+}
+
+.analysis-title {
+   color: #e2e8f0;
+   font-weight: 700;
+   margin-bottom: 8px;
+}
+
+.analysis-formula {
+   color: #c4b5fd;
+   font-size: 0.8rem;
+   line-height: 1.4;
+   margin-bottom: 10px;
+}
+
+.analysis-values {
+   display: grid;
+   gap: 6px;
+}
+
+.analysis-row {
+   display: flex;
+   justify-content: space-between;
+   gap: 12px;
+   font-size: 0.82rem;
+   color: #94a3b8;
+}
+
+.analysis-row strong {
+   color: #e2e8f0;
+   font-weight: 600;
+   text-align: right;
+}
+
+.analysis-empty {
+   margin: 0;
+   color: #94a3b8;
+   font-size: 0.9rem;
+}
+
 .insight-item {
    display: flex;
    align-items: flex-start;

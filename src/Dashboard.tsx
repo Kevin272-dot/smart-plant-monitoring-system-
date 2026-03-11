@@ -176,7 +176,16 @@ const Dashboard = () => {
     const [mlConfidence, setMlConfidence] = useState<string>("--");
     const [mlConfidenceFill, setMlConfidenceFill] = useState<number>(0);
     const [mlInsights, setMlInsights] = useState<Array<{icon: string, text: string, confidence: number}>>([{icon: "⏳", text: "Collecting data for analysis...", confidence: 0}]);
+    const [analysisDetails, setAnalysisDetails] = useState<Array<{
+      title: string;
+      formula: string;
+      values: Array<{ label: string; value: string }>;
+    }>>([]);
     // ML Pattern Analysis helpers
+      function formatAnalysisNumber(value: number, digits = 2) {
+        return Number.isFinite(value) ? value.toFixed(digits) : "--";
+      }
+
     function calculateStdDev(arr: number[]) {
       const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
       const squareDiffs = arr.map(value => Math.pow(value - mean, 2));
@@ -185,7 +194,9 @@ const Dashboard = () => {
 
     function detectTrend(values: number[]) {
       const n = values.length;
-      if (n < 3) return { slope: 0, direction: 'insufficient_data' };
+      if (n < 3) {
+        return { slope: 0, direction: 'insufficient_data', n };
+      }
       let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
       for (let i = 0; i < n; i++) {
         sumX += i;
@@ -195,11 +206,13 @@ const Dashboard = () => {
       }
       const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
       const direction = slope > 0.5 ? 'rising' : slope < -0.5 ? 'falling' : 'stable';
-      return { slope, direction };
+      return { slope, direction, n };
     }
 
     function detectDailyCycle(readings: any[]) {
-      if (readings.length < 10) return { detected: false, pattern: 'insufficient_data' };
+      if (readings.length < 10) {
+        return { detected: false, pattern: 'insufficient_data', readingCount: readings.length, hourCount: 0, variation: '0.0', peakHour: '--', lowHour: '--' };
+      }
       const hourlyData: Record<number, number[]> = {};
       readings.forEach(r => {
         const hour = new Date(r.timestamp).getHours();
@@ -210,28 +223,40 @@ const Dashboard = () => {
         hour: parseInt(hour),
         avgTemp: temps.reduce((a, b) => a + b, 0) / temps.length
       }));
-      if (hourlyAvg.length < 4) return { detected: false, pattern: 'insufficient_data' };
+      if (hourlyAvg.length < 4) {
+        return { detected: false, pattern: 'insufficient_data', readingCount: readings.length, hourCount: hourlyAvg.length, variation: '0.0', peakHour: '--', lowHour: '--' };
+      }
       const temps = hourlyAvg.map(h => h.avgTemp);
       const variation = Math.max(...temps) - Math.min(...temps);
       return {
         detected: variation > 3,
         pattern: variation > 5 ? 'strong_cycle' : variation > 3 ? 'moderate_cycle' : 'weak_cycle',
         variation: variation.toFixed(1),
+        readingCount: readings.length,
+        hourCount: hourlyAvg.length,
         peakHour: hourlyAvg.reduce((a, b) => a.avgTemp > b.avgTemp ? a : b).hour,
         lowHour: hourlyAvg.reduce((a, b) => a.avgTemp < b.avgTemp ? a : b).hour
       };
     }
 
     function calculateAnomalyScore(values: number[], latestValue: number) {
-      if (values.length < 5) return { score: 0, isAnomaly: false };
+      if (values.length < 5) {
+        return { score: 0, isAnomaly: false, zScore: '0.00', mean: 0, stdDev: 0, latestValue, sampleSize: values.length };
+      }
       const mean = values.reduce((a, b) => a + b, 0) / values.length;
       const stdDev = calculateStdDev(values);
-      if (stdDev === 0) return { score: 0, isAnomaly: false };
+      if (stdDev === 0) {
+        return { score: 0, isAnomaly: false, zScore: '0.00', mean, stdDev, latestValue, sampleSize: values.length };
+      }
       const zScore = Math.abs((latestValue - mean) / stdDev);
       return {
         score: Math.min(100, zScore * 33).toFixed(0),
         isAnomaly: zScore > 2,
-        zScore: zScore.toFixed(2)
+        zScore: zScore.toFixed(2),
+        mean,
+        stdDev,
+        latestValue,
+        sampleSize: values.length,
       };
     }
 
@@ -674,6 +699,64 @@ const Dashboard = () => {
           setMlConfidenceFill(confidence);
           // Insights
           setMlInsights(generateMLInsights(data, soilTrend, cycle, { isAnomaly: maxAnomaly > 50, score: maxAnomaly }, weatherLocal));
+          setAnalysisDetails([
+            {
+              title: 'Trend Calculation',
+              formula: 'slope = (nΣxy - ΣxΣy) / (nΣx² - (Σx)²)',
+              values: [
+                { label: 'Readings used', value: `${soilTrend.n}` },
+                { label: 'Soil slope', value: formatAnalysisNumber(soilTrend.slope, 3) },
+                { label: 'Temp slope', value: formatAnalysisNumber(tempTrend.slope, 3) },
+                { label: 'Soil direction', value: soilTrend.direction },
+                { label: 'Temp direction', value: tempTrend.direction },
+              ],
+            },
+            {
+              title: 'Daily Cycle Check',
+              formula: 'variation = max(hourly_avg_temp) - min(hourly_avg_temp)',
+              values: [
+                { label: 'Readings scanned', value: `${cycle.readingCount}` },
+                { label: 'Hourly buckets', value: `${cycle.hourCount}` },
+                { label: 'Variation', value: `${cycle.variation}°C` },
+                { label: 'Peak hour', value: `${cycle.peakHour}:00` },
+                { label: 'Low hour', value: `${cycle.lowHour}:00` },
+                { label: 'Detected if', value: '> 3.0°C variation and 4+ hourly buckets' },
+              ],
+            },
+            {
+              title: 'Temperature Anomaly',
+              formula: 'z = |(latest - mean) / std_dev|, score = min(100, 33 × z)',
+              values: [
+                { label: 'Sample size', value: `${tempAnomaly.sampleSize}` },
+                { label: 'Latest temp', value: `${formatAnalysisNumber(tempAnomaly.latestValue, 1)}°C` },
+                { label: 'Mean temp', value: `${formatAnalysisNumber(tempAnomaly.mean, 2)}°C` },
+                { label: 'Std dev', value: formatAnalysisNumber(tempAnomaly.stdDev, 2) },
+                { label: 'Z-score', value: `${tempAnomaly.zScore}` },
+                { label: 'Score', value: `${tempAnomaly.score}%` },
+              ],
+            },
+            {
+              title: 'Soil Anomaly',
+              formula: 'z = |(latest - mean) / std_dev|, score = min(100, 33 × z)',
+              values: [
+                { label: 'Sample size', value: `${soilAnomaly.sampleSize}` },
+                { label: 'Latest soil', value: `${formatAnalysisNumber(soilAnomaly.latestValue, 0)}%` },
+                { label: 'Mean soil', value: `${formatAnalysisNumber(soilAnomaly.mean, 2)}%` },
+                { label: 'Std dev', value: formatAnalysisNumber(soilAnomaly.stdDev, 2) },
+                { label: 'Z-score', value: `${soilAnomaly.zScore}` },
+                { label: 'Score', value: `${soilAnomaly.score}%` },
+              ],
+            },
+            {
+              title: 'Confidence Score',
+              formula: 'confidence = min(95, 50 + 0.5 × reading_count)',
+              values: [
+                { label: 'Reading count', value: `${data.length}` },
+                { label: 'Computed confidence', value: `${confidence.toFixed(0)}%` },
+                { label: 'Upper cap', value: '95%' },
+              ],
+            },
+          ]);
 
           // --- Weather-Aware Predictions ---
           // Predict next temperature and soil moisture based on trend and weather
@@ -761,6 +844,7 @@ const Dashboard = () => {
           setMlConfidence("--");
           setMlConfidenceFill(0);
           setMlInsights([{icon: "⏳", text: "Need more data points for ML analysis. Keep sensors running...", confidence: 0}]);
+          setAnalysisDetails([]);
 
           setPredTemp("--");
           setPredSoilSource("--");
@@ -1223,6 +1307,29 @@ const Dashboard = () => {
                 </div>
               ))}
             </div>
+          </div>
+          <div className="analysis-details">
+            <h4>🧮 Analysis Details & Formulas</h4>
+            {analysisDetails.length > 0 ? (
+              <div className="analysis-grid">
+                {analysisDetails.map((section, idx) => (
+                  <div className="analysis-card" key={idx}>
+                    <div className="analysis-title">{section.title}</div>
+                    <div className="analysis-formula">{section.formula}</div>
+                    <div className="analysis-values">
+                      {section.values.map((item, valueIdx) => (
+                        <div className="analysis-row" key={valueIdx}>
+                          <span>{item.label}</span>
+                          <strong>{item.value}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="analysis-empty">Collecting enough readings to show formulas and intermediate values.</p>
+            )}
           </div>
         </div>
       </main>
