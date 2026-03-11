@@ -1176,11 +1176,11 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* ML Pattern Analysis */}
+        {/* Statistical Pattern Analysis */}
         <div className="card ml-section">
           <div className="ml-header">
-            <h3>🧠 ML Pattern Analysis</h3>
-            <span className="ml-badge">AI-Powered</span>
+            <h3>🧠 Statistical Pattern Analysis</h3>
+            <span className="ml-badge">Linear Regression + Z-Score</span>
           </div>
           <div className="patterns-grid" id="patternsGrid">
             <div className="pattern-card">

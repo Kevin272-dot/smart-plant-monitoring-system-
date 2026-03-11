@@ -1,32 +1,30 @@
-"""
-🌱 Smart Plant Monitoring System - Sensor Simulator
-====================================================
-Simulates realistic sensor data for testing the cloud infrastructure.
-Supports multiple simulation modes and configurable parameters.
-"""
+"""Sensor simulator aligned with the ESP32 sketch flow."""
 
-import requests
+import sys
+import os
 import random
 import time
-import os
+from datetime import datetime
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Dict, Optional, Tuple
+
+import requests
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
-import sys
-from datetime import datetime
-from typing import Dict, Any
-from dataclasses import dataclass
-from enum import Enum
 
 # ═══════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════
 
-SUPABASE_URL = os.environ.get("VITE_SUPABASE_URL") or os.environ.get("SUPABASE_URL", "https://yhgyeaygmampbvfanumx.supabase.co")
-SUPABASE_KEY = os.environ.get("VITE_SUPABASE_KEY") or os.environ.get("SUPABASE_KEY", "")  # Reads from .env
-API_ENDPOINT = f"{SUPABASE_URL}/rest/v1/readings"
-ALERTS_ENDPOINT = f"{SUPABASE_URL}/rest/v1/alerts"
+SUPABASE_URL = os.environ.get("VITE_SUPABASE_URL") or os.environ.get(
+    "SUPABASE_URL", "https://yhgyeaygmampbvfanumx.supabase.co"
+)
+SUPABASE_KEY = os.environ.get("VITE_SUPABASE_KEY") or os.environ.get("SUPABASE_KEY", "")
+READINGS_ENDPOINT = f"{SUPABASE_URL}/rest/v1/readings"
+SOIL_ALERT_ENDPOINT = f"{SUPABASE_URL}/functions/v1/soil_alert"
 
 # Simulation settings
 INTERVAL_SECONDS = 30
@@ -54,6 +52,16 @@ class SensorThresholds:
     temp_max: float = 35.0
     humidity_min: float = 40.0
     humidity_max: float = 80.0
+
+
+@dataclass
+class AlertCheckResult:
+    """Captures the soil_alert function result for logging."""
+
+    success: bool
+    status_code: int
+    response_text: str
+    response_json: Optional[Dict[str, Any]] = None
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -88,8 +96,8 @@ class SensorSimulator:
         return {
             "soil": random.randint(25, 45),
             "light": random.randint(30, 70),
-            "temp": round(random.uniform(26, 30), 1),
-            "humidity": round(random.uniform(50, 70), 1)
+            "temp": random.randint(26, 30),
+            "humidity": random.randint(50, 70),
         }
     
     def _generate_dry_soil_reading(self) -> Dict[str, Any]:
@@ -98,8 +106,8 @@ class SensorSimulator:
         return {
             "soil": random.randint(max(0, base_soil - 3), min(100, base_soil + 3)),
             "light": random.randint(40, 75),
-            "temp": round(random.uniform(30, 34), 1),
-            "humidity": round(random.uniform(35, 50), 1)
+            "temp": random.randint(30, 34),
+            "humidity": random.randint(35, 50),
         }
     
     def _generate_hot_weather_reading(self) -> Dict[str, Any]:
@@ -107,8 +115,8 @@ class SensorSimulator:
         return {
             "soil": random.randint(10, 30),
             "light": random.randint(75, 95),
-            "temp": round(random.uniform(34, 40), 1),
-            "humidity": round(random.uniform(30, 45), 1)
+            "temp": random.randint(34, 40),
+            "humidity": random.randint(30, 45),
         }
     
     def _generate_night_reading(self) -> Dict[str, Any]:
@@ -116,8 +124,8 @@ class SensorSimulator:
         return {
             "soil": random.randint(25, 45),
             "light": random.randint(0, 5),
-            "temp": round(random.uniform(20, 25), 1),
-            "humidity": round(random.uniform(60, 80), 1)
+            "temp": random.randint(20, 25),
+            "humidity": random.randint(60, 80),
         }
     
     def _generate_random_reading(self) -> Dict[str, Any]:
@@ -125,12 +133,12 @@ class SensorSimulator:
         return {
             "soil": random.randint(self.thresholds.soil_min, self.thresholds.soil_max),
             "light": random.randint(self.thresholds.light_min, self.thresholds.light_max),
-            "temp": round(random.uniform(self.thresholds.temp_min, self.thresholds.temp_max), 1),
-            "humidity": round(random.uniform(self.thresholds.humidity_min, self.thresholds.humidity_max), 1)
+            "temp": random.randint(int(self.thresholds.temp_min), int(self.thresholds.temp_max)),
+            "humidity": random.randint(int(self.thresholds.humidity_min), int(self.thresholds.humidity_max)),
         }
     
     def generate_alert_reading(self) -> Dict[str, Any]:
-        """Generate a reading that will trigger alerts - randomly picks an alert type"""
+        """Generate a slightly abnormal reading that still crosses one alert threshold."""
         alert_types = [
             "soil_dry",
             "soil_wet", 
@@ -147,27 +155,27 @@ class SensorSimulator:
         reading = {
             "soil": random.randint(25, 45),
             "light": random.randint(30, 70),
-            "temp": round(random.uniform(26, 30), 1),
-            "humidity": round(random.uniform(50, 70), 1)
+            "temp": random.randint(26, 30),
+            "humidity": random.randint(50, 70),
         }
         
-        # Override with alert-triggering value (percentage-based to match ESP32)
+        # Use values just beyond the threshold so the alert is realistic, not extreme.
         if chosen_alert == "soil_dry":
-            reading["soil"] = random.randint(0, 8)  # Below 10% threshold
+            reading["soil"] = random.randint(8, 9)
         elif chosen_alert == "soil_wet":
-            reading["soil"] = random.randint(85, 100)  # Above 80% threshold
+            reading["soil"] = random.randint(81, 83)
         elif chosen_alert == "temp_high":
-            reading["temp"] = round(random.uniform(36, 42), 1)  # Above 35 threshold
+            reading["temp"] = random.randint(36, 37)
         elif chosen_alert == "temp_low":
-            reading["temp"] = round(random.uniform(8, 14), 1)  # Below 15 threshold
+            reading["temp"] = random.randint(13, 14)
         elif chosen_alert == "light_low":
-            reading["light"] = random.randint(0, 4)  # Below 5% threshold
+            reading["light"] = random.randint(3, 4)
         elif chosen_alert == "humidity_high":
-            reading["humidity"] = round(random.uniform(82, 95), 1)  # Above 80% threshold
+            reading["humidity"] = random.randint(81, 83)
         elif chosen_alert == "humidity_low":
-            reading["humidity"] = round(random.uniform(15, 28), 1)  # Below 30% threshold
+            reading["humidity"] = random.randint(28, 29)
         
-        print(f"  ⚡ ALERT TEST: Triggering '{chosen_alert}' alert!")
+        print(f"  ⚡ ALERT TEST: Mild '{chosen_alert}' threshold breach")
         reading["_alert_type"] = chosen_alert  # Store alert type for later use
         return reading
 
@@ -194,7 +202,7 @@ class SupabaseClient:
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 response = requests.post(
-                    API_ENDPOINT,
+                    READINGS_ENDPOINT,
                     headers=self.headers,
                     json=data,
                     timeout=10
@@ -217,31 +225,40 @@ class SupabaseClient:
         
         return False
     
-    def send_alert(self, alert_type: str, data: Dict[str, Any]) -> bool:
-        """Send alert to Supabase alerts table"""
-        # The alerts table only has: id, type, triggered_at
-        alert_data = {
-            "type": alert_type
+    def trigger_alert_check(self) -> AlertCheckResult:
+        """Invoke the edge function that applies thresholds, cooldowns, and SMS sending."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.key}",
         }
-        
+
         try:
             response = requests.post(
-                ALERTS_ENDPOINT,
-                headers=self.headers,
-                json=alert_data,
-                timeout=10
+                SOIL_ALERT_ENDPOINT,
+                headers=headers,
+                json={},
+                timeout=15,
             )
-            
-            if response.status_code in (200, 201):
-                print(f"  📝 Alert '{alert_type}' saved to database!")
-                return True
-            else:
-                print(f"  ⚠️  Failed to save alert: {response.status_code} - {response.text}")
-                return False
-                
-        except Exception as e:
-            print(f"  ❌ Error saving alert: {e}")
-            return False
+
+            parsed_json: Optional[Dict[str, Any]] = None
+            try:
+                parsed_json = response.json()
+            except ValueError:
+                parsed_json = None
+
+            return AlertCheckResult(
+                success=response.ok,
+                status_code=response.status_code,
+                response_text=response.text,
+                response_json=parsed_json,
+            )
+        except Exception as error:
+            return AlertCheckResult(
+                success=False,
+                status_code=0,
+                response_text=str(error),
+                response_json=None,
+            )
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -254,6 +271,8 @@ def print_banner():
     print("  🌱 SMART PLANT MONITORING SYSTEM - SIMULATOR")
     print("═" * 60)
     print(f"  📡 Endpoint: {SUPABASE_URL}")
+    print(f"  🗄️  Readings API: {READINGS_ENDPOINT}")
+    print(f"  ⚙️  Edge Function: {SOIL_ALERT_ENDPOINT}")
     print(f"  ⏱️  Interval: {INTERVAL_SECONDS} seconds")
     print("═" * 60 + "\n")
 
@@ -267,6 +286,42 @@ def print_reading(data: Dict[str, Any], success: bool, count: int):
     print(f"  💧 Soil: {data['soil']:>5}  |  💡 Light: {data['light']:>5}")
     print(f"  🌡️  Temp: {data['temp']:>5}°C |  💨 Humidity: {data['humidity']:>5}%")
     print("-" * 50)
+
+
+def get_led_state(data: Dict[str, Any]) -> Tuple[str, str]:
+    """Mirror the ESP32 LED logic for console visibility."""
+    if data["soil"] < 30 or data["light"] < 10 or data["light"] > 90:
+        return "RED", "Plant needs attention"
+    if 30 <= data["soil"] <= 50:
+        return "YELLOW", "Borderline moisture range"
+    return "GREEN", "Healthy LED state"
+
+
+def print_alert_result(result: AlertCheckResult):
+    """Summarize the soil_alert edge function response."""
+    status = "✅" if result.success else "❌"
+    print(f"  {status} Alert check HTTP: {result.status_code}")
+
+    if result.response_json:
+        payload = result.response_json
+        if payload.get("error"):
+            print(f"  ⚠️  Function error: {payload['error']}")
+        if payload.get("details"):
+            print(f"  🧾 Details: {payload['details']}")
+        print(
+            "  🔔 Alerts: detected={0} triggered={1} sms_sent={2}".format(
+                payload.get("alerts_detected", "?"),
+                payload.get("alerts_triggered", "?"),
+                payload.get("notification_sent", False),
+            )
+        )
+        if payload.get("notification_error"):
+            print(f"  ⚠️  SMS error: {payload['notification_error']}")
+        if payload.get("missing_twilio_config"):
+            missing = ", ".join(payload["missing_twilio_config"])
+            print(f"  ⚠️  Missing Twilio config: {missing}")
+    elif result.response_text:
+        print(f"  🧾 Alert response: {result.response_text}")
 
 
 def get_health_status(data: Dict[str, Any]) -> str:
@@ -288,7 +343,7 @@ def get_health_status(data: Dict[str, Any]) -> str:
     
     if data['humidity'] < 30:
         issues.append("🏜️ Low humidity!")
-    elif data['humidity'] > 60:
+    elif data['humidity'] > 80:
         issues.append("🌫️ High humidity!")
     
     return " | ".join(issues) if issues else "✅ Plant healthy!"
@@ -316,6 +371,10 @@ def main():
     
     simulator = SensorSimulator(mode)
     client = SupabaseClient(SUPABASE_URL, SUPABASE_KEY)
+
+    if not SUPABASE_KEY:
+        print("Missing SUPABASE_KEY or VITE_SUPABASE_KEY in the environment.")
+        sys.exit(1)
     
     reading_count = 0
     success_count = 0
@@ -323,28 +382,30 @@ def main():
     try:
         while True:
             reading_count += 1
-            alert_type = None
             
-            # Every 10th reading, generate an alert-triggering reading
+            # Every 10th reading, generate a mild threshold breach that should still alert.
             if reading_count % 10 == 0:
                 print("\n" + "="*50)
                 print("  🚨 ALERT TEST READING (every 10th reading)")
                 print("="*50)
                 data = simulator.generate_alert_reading()
-                alert_type = data.pop("_alert_type", None)  # Extract and remove alert type
+                data.pop("_alert_type", None)
             else:
                 data = simulator.generate_reading()
             
             success = client.send_reading(data)
+            alert_result = None
             
             if success:
                 success_count += 1
-                # If this was an alert reading, save the alert to database
-                if alert_type:
-                    client.send_alert(alert_type, data)
+                alert_result = client.trigger_alert_check()
             
             print_reading(data, success, reading_count)
             print(f"  {get_health_status(data)}")
+            led_color, led_message = get_led_state(data)
+            print(f"  💡 LED: {led_color} | {led_message}")
+            if alert_result is not None:
+                print_alert_result(alert_result)
             print(f"  📊 Success rate: {success_count}/{reading_count} ({100*success_count/reading_count:.1f}%)\n")
             
             time.sleep(INTERVAL_SECONDS)

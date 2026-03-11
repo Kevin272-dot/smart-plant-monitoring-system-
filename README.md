@@ -34,19 +34,19 @@ A cloud-based IoT solution for monitoring plant health using environmental senso
 ## 🏗 Architecture
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   ESP32/Python  │────▶│  Supabase Cloud  │────▶│    Dashboard    │
-│    Simulator    │     │                  │     │   (Web App)     │
-└─────────────────┘     │  ┌────────────┐  │     └─────────────────┘
-                        │  │ PostgreSQL │  │
-                        │  │  Database  │  │     ┌─────────────────┐
-                        │  └────────────┘  │────▶│   SMS Alerts    │
-                        │                  │     └─────────────────┘
-                        │  ┌────────────┐  │
-                        │  │   Edge     │  │
-                        │  │ Functions  │  │
-                        │  └────────────┘  │
-                        └──────────────────┘
+┌────────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│  ESP32 + Sensors   │───▶│  Supabase Cloud  │───▶│    Dashboard    │
+│ DHT22 + Soil + LDR │    │                  │    │   (Web App)     │
+│ + OLED Display     │    │  ┌────────────┐  │    └─────────────────┘
+└────────────────────┘    │  │ PostgreSQL │  │
+                          │  │  Database  │  │    ┌─────────────────┐
+                          │  └────────────┘  │───▶│   SMS Alerts    │
+                          │                  │    └─────────────────┘
+                          │  ┌────────────┐  │
+                          │  │   Edge     │  │
+                          │  │ Functions  │  │
+                          │  └────────────┘  │
+                          └──────────────────┘
 ```
 
 ---
@@ -55,10 +55,11 @@ A cloud-based IoT solution for monitoring plant health using environmental senso
 
 ### Prerequisites
 
-- Python 3.8+ (for simulator)
+- ESP32 hardware setup with DHT22, soil moisture sensor, LDR, and OLED display
 - Node.js 18+ (for Supabase CLI)
 - Supabase account
 - Twilio account (optional, for SMS alerts)
+- Python 3.8+ (optional, only for simulator/testing)
 
 ### Installation
 
@@ -149,7 +150,27 @@ Default thresholds (customizable in `soil_alert/index.ts`):
 
 ## 📖 Usage
 
-### Running the Simulator
+### Running the Hardware System
+
+1. Connect the ESP32, DHT22, soil moisture sensor, LDR, and OLED display.
+2. Power on the ESP32 and ensure it is connected to Wi-Fi.
+3. Verify that the OLED shows live temperature, humidity, soil, and light values.
+4. Confirm readings are being pushed to Supabase.
+5. Open the dashboard to view live updates and alerts.
+
+### Viewing the Dashboard
+
+- Hosted (Vercel): https://smartplantmonitoringsystem.vercel.app/
+- Local development:
+
+```bash
+npm install
+npm run dev
+```
+
+### Optional: Running the Simulator
+
+Use the simulator only for testing when the hardware is not available.
 
 ```bash
 # Normal mode (healthy plant conditions)
@@ -166,18 +187,6 @@ python simulator.py night_time
 
 # Random values
 python simulator.py random
-```
-
-### Viewing the Dashboard
-
-- Hosted (Vercel): https://smartplantmonitoringsystem.vercel.app/
-- Local: open `docs/index.html` in a browser, or serve it:
-
-```bash
-# Using Python
-python -m http.server 8000 --directory docs
-
-# Then open http://localhost:8000
 ```
 
 ### Deploying Edge Functions
@@ -249,14 +258,20 @@ Generate and send a comprehensive 24-hour report.
 
 ```
 smart_plant_monitoring_system/
-├── index.ts                    # Project documentation/types
-├── simulator.py                # Python sensor simulator
-├── package.json                # Node dependencies
-├── README.md                   # This file
-│
-├── dashboard/
-│   └── index.html              # Real-time monitoring dashboard
-│
+├── index.html                  # Vite app entry HTML
+├── index.ts                    # Project metadata/types
+├── simulator.py                # Optional Python simulator for testing
+├── package.json                # Node dependencies and scripts
+├── README.md                   # Project overview
+├── vite.config.ts              # Vite configuration
+├── tsconfig.json               # TypeScript configuration
+├── src/                        # React dashboard source
+│   ├── Dashboard.tsx
+│   ├── App.tsx
+│   ├── main.tsx
+│   └── App.css
+├── docs/                       # Static docs/demo assets
+├── public/                     # Public assets
 └── supabase/
     ├── config.toml             # Supabase configuration
     └── functions/
@@ -273,11 +288,12 @@ smart_plant_monitoring_system/
 
 | Component | Technology |
 |-----------|------------|
-| Hardware | ESP32, DHT22, Soil Sensor, LDR |
-| Simulator | Python 3.x |
+| Hardware | ESP32, DHT22, Soil Moisture Sensor, LDR, OLED |
+| Embedded Layer | ESP32 Wi-Fi firmware |
+| Simulator | Python 3.x (optional testing utility) |
 | Database | PostgreSQL (Supabase) |
 | Backend | Supabase Edge Functions (Deno) |
-| Frontend | HTML5, CSS3, Chart.js |
+| Frontend | React, TypeScript, Vite, Chart.js |
 | Notifications | Twilio SMS |
 | Security | JWT, Row Level Security |
 

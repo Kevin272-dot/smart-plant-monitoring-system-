@@ -56,6 +56,12 @@ interface Alert {
   threshold: number;
 }
 
+interface SMSResult {
+  success: boolean;
+  status?: number;
+  error?: string;
+}
+
 function analyzeReading(reading: SensorReading): Alert[] {
   const alerts: Alert[] = [];
 
@@ -159,11 +165,12 @@ async function isAlertOnCooldown(
 async function sendTwilioSMS(
   accountSid: string,
   authToken: string,
-  from: string,
+  from: string | null,
+  messagingServiceSid: string | null,
   to: string,
   alerts: Alert[],
   reading: SensorReading
-): Promise<boolean> {
+): Promise<SMSResult> {
   const severityEmoji: Record<string, string> = {
     critical: "🚨",
     warning: "⚠️",
@@ -180,19 +187,64 @@ async function sendTwilioSMS(
   const credentials = btoa(`${accountSid}:${authToken}`);
 
   try {
+    const params = new URLSearchParams({
+      To: to,
+      Body: body,
+    });
+
+    if (messagingServiceSid) {
+      params.set("MessagingServiceSid", messagingServiceSid);
+    } else if (from) {
+      params.set("From", from);
+    } else {
+      return {
+        success: false,
+        error: "Missing Twilio sender configuration",
+      };
+    }
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
         "Authorization": `Basic ${credentials}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: `From=${encodeURIComponent(from)}&To=${encodeURIComponent(to)}&Body=${encodeURIComponent(body)}`,
+      body: params.toString(),
     });
-    return response.ok;
-  } catch {
-    console.error("Failed to send Twilio SMS");
-    return false;
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Twilio SMS request failed", {
+        status: response.status,
+        body: errorText,
+      });
+      return {
+        success: false,
+        status: response.status,
+        error: errorText,
+      };
+    }
+
+    return {
+      success: true,
+      status: response.status,
+    };
+  } catch (error) {
+    console.error("Failed to send Twilio SMS", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown Twilio request error",
+    };
   }
+}
+
+function getEnv(...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = Deno.env.get(key)?.trim();
+    if (value) return value;
+  }
+
+  return null;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -212,11 +264,15 @@ serve(async (req: Request) => {
   }
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("PROJECT_URL");
-  const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY");
-  const TWILIO_SID = Deno.env.get("TWILIO_SID");
-  const TWILIO_TOKEN = Deno.env.get("TWILIO_TOKEN");
-  const TWILIO_FROM = Deno.env.get("TWILIO_FROM");
-  const TWILIO_TO = Deno.env.get("TWILIO_TO");
+  const SERVICE_ROLE_KEY = getEnv("SUPABASE_SERVICE_ROLE_KEY", "SERVICE_ROLE_KEY");
+  const TWILIO_SID = getEnv("TWILIO_ACCOUNT_SID", "TWILIO_SID");
+  const TWILIO_TOKEN = getEnv("TWILIO_AUTH_TOKEN", "TWILIO_TOKEN");
+  const TWILIO_FROM = getEnv("TWILIO_PHONE_FROM", "TWILIO_FROM");
+  const TWILIO_MESSAGING_SERVICE_SID = getEnv(
+    "TWILIO_MESSAGING_SERVICE_SID",
+    "TWILIO_SERVICE_SID"
+  );
+  const TWILIO_TO = getEnv("ALERT_PHONE_TO", "TWILIO_TO");
 
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
     return new Response(
@@ -279,8 +335,37 @@ serve(async (req: Request) => {
 
   // Send Twilio SMS if there are active alerts
   let notificationSent = false;
-  if (activeAlerts.length > 0 && TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM && TWILIO_TO) {
-    notificationSent = await sendTwilioSMS(TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM, TWILIO_TO, activeAlerts, reading);
+  let notificationError: string | null = null;
+  let missingTwilioConfig: string[] = [];
+  if (
+    activeAlerts.length > 0 &&
+    TWILIO_SID &&
+    TWILIO_TOKEN &&
+    TWILIO_TO &&
+    (TWILIO_FROM || TWILIO_MESSAGING_SERVICE_SID)
+  ) {
+    const smsResult = await sendTwilioSMS(
+      TWILIO_SID,
+      TWILIO_TOKEN,
+      TWILIO_FROM,
+      TWILIO_MESSAGING_SERVICE_SID,
+      TWILIO_TO,
+      activeAlerts,
+      reading
+    );
+    notificationSent = smsResult.success;
+    notificationError = smsResult.success
+      ? null
+      : smsResult.error ?? `Twilio request failed with status ${smsResult.status ?? "unknown"}`;
+  } else if (activeAlerts.length > 0) {
+    missingTwilioConfig = [
+      !TWILIO_SID ? "TWILIO_ACCOUNT_SID/TWILIO_SID" : null,
+      !TWILIO_TOKEN ? "TWILIO_AUTH_TOKEN/TWILIO_TOKEN" : null,
+      !TWILIO_FROM && !TWILIO_MESSAGING_SERVICE_SID
+        ? "TWILIO_PHONE_FROM/TWILIO_FROM or TWILIO_MESSAGING_SERVICE_SID/TWILIO_SERVICE_SID"
+        : null,
+      !TWILIO_TO ? "ALERT_PHONE_TO/TWILIO_TO" : null,
+    ].filter((value): value is string => value !== null);
   }
 
   // Return response
@@ -293,6 +378,8 @@ serve(async (req: Request) => {
       alerts_on_cooldown: alerts.length - activeAlerts.length,
       logged_alerts: loggedAlerts,
       notification_sent: notificationSent,
+      notification_error: notificationError,
+      missing_twilio_config: missingTwilioConfig,
       thresholds: THRESHOLDS,
     }),
     {

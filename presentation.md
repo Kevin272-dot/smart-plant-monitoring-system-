@@ -198,7 +198,7 @@ Water your Bird's Nest Snake Plant immediately.
 - Radar chart for system health overview
 - 6-hour prediction chart
 
-### 4. ML Pattern Analysis
+### 4. Statistical Pattern Analysis
 - **Trend Detection** — Linear regression on recent values
 - **Daily Cycle Detection** — Hourly pattern analysis (peak/low hours)
 - **Anomaly Detection** — Z-score statistical analysis
@@ -320,7 +320,7 @@ Water your Bird's Nest Snake Plant immediately.
 - **< 2 second latency** from sensor reading to dashboard update
 - **SMS alerts** delivered within seconds of threshold breach
 - **30-minute cooldown** eliminates notification spam
-- **ML predictions** for next-hour temperature and soil moisture
+- **Trend-based predictions** for next-hour temperature and soil moisture
 - **Weather-aware** watering recommendations
 - Successfully validated with **live hardware readings** from the ESP32 sensor board and OLED display
 
@@ -349,7 +349,7 @@ The **Smart Plant Monitoring System** demonstrates a complete IoT pipeline:
 Key achievements:
 - End-to-end cloud-native architecture
 - Real-time data pipeline with intelligent alert processing
-- ML-powered insights and predictions
+- Statistical insights using linear regression and z-score analysis
 - Scalable deployment on Vercel + Supabase
 - Affordable and extensible design
 
