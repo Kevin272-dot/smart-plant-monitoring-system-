@@ -33,10 +33,11 @@ ChartJS.register(
 
 // Configuration is read from Vite environment variables. Create a .env file with VITE_ prefixed keys.
 // Example keys are provided in `.env.example` (do NOT commit your real `.env`).
-const SUPABASE_URL = (import.meta as any)?.env?.VITE_SUPABASE_URL || 'https://yhgyeaygmampbvfanumx.supabase.co';
-const SUPABASE_KEY = (import.meta as any)?.env?.VITE_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InloZ3llYXlnbWFtcGJ2ZmFudW14Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0NTk3NTAsImV4cCI6MjA4MzAzNTc1MH0.VKlVMFg3RKHjmnseIWfBVc5QZX7vWJsq9oaiIu7kmwI';
-const WEATHER_API_KEY = (import.meta as any)?.env?.VITE_WEATHER_API_KEY || 'a2f5686772b6e58369b6aa0af5c356f6';
-const WEATHER_CITY = (import.meta as any)?.env?.VITE_WEATHER_CITY || 'Chennai';
+const SUPABASE_URL = String(import.meta.env.VITE_SUPABASE_URL || "").trim();
+const SUPABASE_KEY = String(import.meta.env.VITE_SUPABASE_KEY || "").trim();
+const WEATHER_API_KEY = String(import.meta.env.VITE_WEATHER_API_KEY || "").trim();
+const WEATHER_CITY = String(import.meta.env.VITE_WEATHER_CITY || "Chennai").trim();
+const SARVAM_API_KEY = String(import.meta.env.VITE_SARVAM_API_KEY || "").trim();
 
 // If required Vite env vars are missing, we will render a friendly placeholder component.
 const MISSING_CONFIG = !SUPABASE_URL || !SUPABASE_KEY;
@@ -52,9 +53,12 @@ function DashboardMissingConfig() {
       <h2 style={{ marginBottom: 8 }}>Configuration required</h2>
       <p>VITE_SUPABASE_URL or VITE_SUPABASE_KEY is missing. Create a local <code>.env</code> from <code>.env.example</code> and restart the dev server.</p>
       <p>Example entries:</p>
-      <pre style={{ background: '#0f172a', color: '#e2e8f0', padding: 12 }}>VITE_SUPABASE_URL=https://your-project.supabase.co
+      <pre style={{ background: '#0f172a', color: '#e2e8f0', padding: 12 }}>
+{`VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_KEY=REPLACE_WITH_YOUR_ANON_KEY
-VITE_WEATHER_API_KEY=REPLACE_WITH_YOUR_OPENWEATHERMAP_KEY</pre>
+VITE_WEATHER_API_KEY=REPLACE_WITH_YOUR_OPENWEATHERMAP_KEY
+VITE_SARVAM_API_KEY=REPLACE_WITH_YOUR_SARVAM_KEY`}
+      </pre>
     </div>
   );
 }
@@ -162,10 +166,177 @@ const Dashboard = () => {
     }
   };
 
-  // deno-lint-ignore ban-unused-ignore
+  const playAudioSummary = async () => {
+    if (isSpeaking) return;
+    
+    // Translation dictionary for all supported Sarvam languages
+    const dict: any = {
+      "en-IN": {
+        intro: "Here is your plant summary.",
+        temp: "The temperature is {val} degrees.",
+        soil: "Soil moisture is at {val}.",
+        light: "Light level is {val}.",
+        health: "Overall plant health is {val}.",
+        insight: "Insight: {val}",
+        alert: "Warning: There is a recent alert for {val}.",
+        noAlert: "Your plant is happy with no recent alerts."
+      },
+      "hi-IN": {
+        intro: "यहाँ आपके पौधे का विवरण है।",
+        temp: "तापमान {val} डिग्री है।",
+        soil: "मिट्टी की नमी {val} है।",
+        light: "प्रकाश का स्तर {val} है।",
+        health: "पौधे का स्वास्थ्य {val} है।",
+        insight: "सुझाव: {val}",
+        alert: "चेतावनी: {val} के लिए एक नया अलर्ट है।",
+        noAlert: "आपके पौधे में कोई चेतावनी नहीं है, वह स्वस्थ है।"
+      },
+      "ta-IN": {
+        intro: "உங்கள் தாவரத்தின் சுருக்கம் இங்கே.",
+        temp: "வெப்பநிலை {val} டிகிரி.",
+        soil: "மண்ணின் ஈரப்பதம் {val}.",
+        light: "ஒளி அளவு {val}.",
+        health: "தாவர ஆரோக்கியம் {val}.",
+        insight: "தகவல்: {val}",
+        alert: "எச்சரிக்கை: {val} க்கான புதிய எச்சரிக்கை உள்ளது.",
+        noAlert: "எந்த ஒரு புதிய எச்சரிக்கையும் இல்லை, தாவரம் நலமாக உள்ளது."
+      },
+      "bn-IN": {
+        intro: "এখানে আপনার গাছের সারাংশ।",
+        temp: "তাপমাত্রা {val} ডিগ্রি।",
+        soil: "মাটির আর্দ্রতা {val}।",
+        light: "আলোর স্তর {val}।",
+        health: "গাছের স্বাস্থ্য {val}।",
+        insight: "পরামর্শ: {val}",
+        alert: "সতর্কতা: {val} এর জন্য একটি নতুন সতর্কতা রয়েছে।",
+        noAlert: "কোনো সতর্কতা নেই, আপনার গাছ ভালো আছে।"
+      },
+      "ml-IN": {
+        intro: "നിങ്ങളുടെ ചെടിയുടെ സംഗ്രഹം ഇതാ.",
+        temp: "താപനില {val} ഡിഗ്രി ആണ്.",
+        soil: "മണ്ണിലെ ഈർപ്പം {val} ആണ്.",
+        light: "പ്രകാശ നില {val} ആണ്.",
+        health: "ചെടിയുടെ ആരോഗ്യം {val} ആണ്.",
+        insight: "അറിവ്: {val}",
+        alert: "മുന്നറിയിപ്പ്: {val} ഒരു പുതിയ മുന്നറിയിപ്പ് ഉണ്ട്.",
+        noAlert: "പുതിയ മുന്നറിയിപ്പുകൾ ഒന്നുമില്ല, നിങ്ങളുടെ ചെടി സന്തുഷ്ടനാണ്."
+      },
+      "te-IN": {
+        intro: "ఇది మీ మొక్క సారాంశం.",
+        temp: "ఉష్ణోగ్రత {val} డిగ్రీలు.",
+        soil: "నేల తేమ {val} వద్ద ఉంది.",
+        light: "కాంతి స్థాయి {val}.",
+        health: "మొక్క ఆరోగ్యం {val}.",
+        insight: "సూచన: {val}",
+        alert: "హెచ్చరిక: {val} కోసం ఒక కొత్త హెచ్చరిక ఉంది.",
+        noAlert: "ఎలాంటి హెచ్చరికలు లేవు, మొక్క సంతోషంగా ఉంది."
+      },
+      "kn-IN": {
+        intro: "ನಿಮ್ಮ ಗಿಡದ ಸಾರಾಂಶ ಇಲ್ಲಿದೆ.",
+        temp: "ತಾಪಮಾನ {val} ಡಿಗ್ರಿ ಇದೆ.",
+        soil: "ಮಣ್ಣಿನ ತೇವಾಂಶ {val} ಇದೆ.",
+        light: "ಬೆಳಕಿನ ಮಟ್ಟ {val} ಇದೆ.",
+        health: "ಗಿಡದ ಆರೋಗ್ಯ {val} ಇದೆ.",
+        insight: "ಮಾಹಿತಿ: {val}",
+        alert: "ಎಚ್ಚರಿಕೆ: {val} ಗಾಗಿ ಹೊಸ ಎಚ್ಚರಿಕೆ ಇದೆ.",
+        noAlert: "ಯಾವುದೇ ಹೊಸ ಎಚ್ಚರಿಕೆಗಳಿಲ್ಲ, ನಿಮ್ಮ ಗಿಡ ಖುಷಿಯಾಗಿದೆ."
+      }
+    };
+
+    const t = dict[speechLanguage] || dict["en-IN"];
+
+    // Generate text summary based on currents
+    let text = `${t.intro} `;
+    if (currentTemp !== "--") {
+      text += `${t.temp.replace('{val}', currentTemp)} `;
+    }
+    if (currentSoil !== "--") {
+      text += `${t.soil.replace('{val}', currentSoil)} `;
+    }
+    if (currentLight !== "--") {
+      text += `${t.light.replace('{val}', currentLight)} `;
+    }
+    if (healthScore !== "--") {
+      text += `${t.health.replace('{val}', healthScore)} `;
+    }
+    
+    // For translation simplicity in insights/alerts, we only dynamically map English for now unless they get formally translated by a backend, but we'll include the template structure.
+    if (speechLanguage === "en-IN") {
+      if (mlInsights.length > 0 && mlInsights[0].confidence > 0) {
+        text += `${t.insight.replace('{val}', mlInsights[0].text)} `;
+      }
+      if (alerts && alerts.length > 0) {
+        text += `${t.alert.replace('{val}', alerts[0].type.replace(/_/g, " "))} `;
+      } else {
+        text += `${t.noAlert} `;
+      }
+    } else {
+      // In other languages just say if it's happy or not 
+      if (alerts && alerts.length > 0) {
+        text += `${t.alert.replace('{val}', '')} `;
+      } else {
+        text += `${t.noAlert} `;
+      }
+    }
+
+    setSummaryText(text);
+
+    if (!SARVAM_API_KEY) {
+      alert("Please configure VITE_SARVAM_API_KEY in your .env file to enable text-to-speech.");
+      return;
+    }
+
+    try {
+      setIsSpeaking(true);
+      const response = await fetch("https://api.sarvam.ai/text-to-speech", {
+        method: "POST",
+        headers: {
+          "api-subscription-key": SARVAM_API_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          inputs: [text],
+          target_language_code: speechLanguage,
+          speaker: "shubh",
+          pace: 1.1,
+          speech_sample_rate: 8000,
+          enable_preprocessing: true,
+          model: "bulbul:v3"
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errText}`);
+      }
+
+      const data = await response.json();
+      if (data.audios && data.audios.length > 0) {
+        const audio = new Audio(`data:audio/wav;base64,${data.audios[0]}`);
+        audio.onended = () => setIsSpeaking(false);
+        audio.play().catch(e => {
+          console.error("Audio playback failed", e);
+          setIsSpeaking(false);
+        });
+      } else {
+        setIsSpeaking(false);
+      }
+    } catch (e) {
+      console.error("Speech summary failed:", e);
+      setIsSpeaking(false);
+      alert("Failed to generate speech. Check console for details.");
+    }
+  };
+
   // deno-lint-ignore ban-unused-ignore
   // deno-lint-ignore no-explicit-any
   const [sensorReadings, setSensorReadings] = useState<any[]>([]);
+  
+  // Summary & Speech State
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+  const [speechLanguage, setSpeechLanguage] = useState<string>("en-IN");
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+
     // ML Pattern Analysis state
     const [mlTrend, setMlTrend] = useState<string>("--");
     const [mlTrendDesc, setMlTrendDesc] = useState<string>("Analyzing patterns...");
@@ -935,8 +1106,37 @@ const Dashboard = () => {
           <div className="status-dot"></div>
             <span>Live • Updating every 30s</span>
             <button onClick={manualRefresh} style={{ marginLeft: 12, padding: '6px 10px', borderRadius: 6, background: '#334155', color: '#fff', border: 'none', cursor: 'pointer' }}>Refresh</button>
+            
+            <div style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 12, background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: 6 }}>
+              <select 
+                value={speechLanguage} 
+                onChange={(e) => setSpeechLanguage(e.target.value)}
+                style={{ background: 'transparent', color: '#fff', border: 'none', padding: '4px', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="en-IN" style={{ color: '#000' }}>English</option>
+                <option value="hi-IN" style={{ color: '#000' }}>Hindi</option>
+                <option value="ta-IN" style={{ color: '#000' }}>Tamil</option>
+                <option value="bn-IN" style={{ color: '#000' }}>Bengali</option>
+                <option value="ml-IN" style={{ color: '#000' }}>Malayalam</option>
+                <option value="te-IN" style={{ color: '#000' }}>Telugu</option>
+                <option value="kn-IN" style={{ color: '#000' }}>Kannada</option>
+              </select>
+              <button 
+                onClick={playAudioSummary} 
+                disabled={isSpeaking}
+                style={{ marginLeft: 8, padding: '6px 12px', borderRadius: 4, background: isSpeaking ? '#94a3b8' : '#ec4899', color: '#fff', border: 'none', cursor: isSpeaking ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+              >
+                {isSpeaking ? '🗣️ Speaking...' : '🗣️ Play Summary'}
+              </button>
+            </div>
         </div>
       </header>
+
+      {summaryText && (
+        <div style={{ margin: "0 1rem 1rem", padding: "1rem", backgroundColor: "rgba(236, 72, 153, 0.1)", border: "1px solid rgba(236, 72, 153, 0.3)", borderRadius: "8px", color: "#fdf2f8" }}>
+          <strong>📝 Audio Summary Text:</strong> <p style={{ marginTop: '8px' }}>{summaryText}</p>
+        </div>
+      )}
 
       {error && (
         <div className="error-banner" style={{ padding: "1rem", backgroundColor: "#fee2e2", color: "#dc2626", margin: "1rem", borderRadius: "8px" }}>
