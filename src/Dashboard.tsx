@@ -596,20 +596,50 @@ const Dashboard = () => {
         let plantReply = "I'm just chilling.";
         const cTemp = parseFloat(currentTemp);
         const cSoil = parseFloat(currentSoil);
+        const msg = userMsg.toLowerCase();
         
-        if (userMsg.toLowerCase().includes("how are you") || userMsg.toLowerCase().includes("status")) {
+        // Status checks
+        if (msg.includes("how are you") || msg.includes("status")) {
             if (cSoil < 15) plantReply = "I'm feeling a bit thirsty, my soil is pretty dry!";
             else if (cSoil > 60) plantReply = "I'm drowning! My soil is too wet!";
+            else if (cTemp > 30) plantReply = "I'm doing okay, but it's getting a bit hot for me in here. 🥵";
             else plantReply = "I'm perfectly happy actually. Good temperature and dry-ish soil.";
-        } else if (userMsg.toLowerCase().includes("water")) {
-            if (cSoil < 15) plantReply = "Yes please, lightly! But not too much.";
-            else plantReply = "No need! Snake plants hate overwatering. Give me some time to dry out.";
-        } else if (userMsg.toLowerCase().includes("joke")) {
+        } 
+        // Care / Needs
+        else if (msg.includes("water") || msg.includes("drink")) {
+            if (cSoil < 15) plantReply = "Yes please, lightly! But not too much, remember to let my soil dry out again soon.";
+            else plantReply = "No need! Snake plants hate overwatering. Give me some time to completely dry out before watering me again.";
+        } 
+        else if (msg.includes("light") || msg.includes("sun")) {
+            plantReply = "I'm very adaptable! I love bright, indirect sunlight, but I can also survive surprisingly well in low light.";
+        }
+        // Identity & Biology
+        else if (msg.includes("originate") || msg.includes("where") && (msg.includes("from") || msg.includes("born"))) {
+            plantReply = "I'm originally from tropical West Africa, stretching from Nigeria all the way to the Congo! That's why I'm tough enough to handle dry spells.";
+        }
+        else if (msg.includes("unique") || msg.includes("special") || msg.includes("fact")) {
+            plantReply = "I have a rosette shape that makes me look like a little bird's nest! Also, I use CAM photosynthesis, meaning I release fresh oxygen at night while you sleep! 🌙💨";
+        }
+        else if (msg.includes("scientific") || msg.includes("name")) {
+            plantReply = "My scientific name is 'Sansevieria trifasciata Hahnii', but 'Bird's Nest Snake Plant' is much easier to say!";
+        }
+        else if (msg.includes("care") || msg.includes("tips") || msg.includes("help") || msg.includes("how to")) {
+            plantReply = "My golden rules: 1) Only water me when my soil is 100% dry. 2) Keep me warm (15°C–30°C). 3) Give me indirect light. I literally thrive on neglect!";
+        }
+        // Blooming / Flowers
+        else if (msg.includes("flower") || msg.includes("bloom")) {
+            plantReply = "I can actually produce flowers! Though it's quite rare indoors. When I am slightly stressed (like being root-bound), I might shoot up a stalk of fragrant, greenish-white flowers that smell like lilies or vanilla at night! 🌸";
+        }
+        // Personality
+        else if (msg.includes("joke")) {
             plantReply = "Why don't plants like math? Because it gives them square roots! 🌿";
-        } else if (userMsg.toLowerCase().includes("hello") || userMsg.toLowerCase().includes("hi")) {
+        } 
+        else if (msg === "hello" || msg === "hi" || msg.includes("hey")) {
             plantReply = "Hey there! Still photosynthesizing ☀️.";
-        } else {
-            plantReply = "Interesting... well as a plant, I mostly only think about sunlight and water. But tell me more!";
+        } 
+        // Fallback
+        else {
+            plantReply = "Interesting... my tiny plant brain doesn't know the answer to that. But I can tell you about my origin, my care routine, or how I'm feeling right now!";
         }
         setChatMessages(prev => [...prev, { sender: 'plant', text: plantReply }]);
     }, 800);
