@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-explicit-any no-unused-vars ban-unused-ignore jsx-button-has-type
 // deno-lint-ignore-file
 import { useState, useEffect, useMemo } from "react";
-import { Line as ChartLine, Radar } from "react-chartjs-2";
+import { Line as ChartLine, Radar, Doughnut } from "react-chartjs-2";
 import { createClient } from "@supabase/supabase-js";
 import {
   Chart as ChartJS,
@@ -575,7 +575,45 @@ const Dashboard = () => {
   const [predSoilSource, setPredSoilSource] = useState<string>("--");
   const [predWatering, setPredWatering] = useState<string>("--");
   const [predWateringReason, setPredWateringReason] = useState<string>("--");
+  const [hoursUntilWater, setHoursUntilWater] = useState<string>("--");
   const [predictionChartData, setPredictionChartData] = useState<any>(null);
+
+  // Chat Widget state
+  const [chatMessages, setChatMessages] = useState<{sender: string, text: string}[]>([
+    { sender: 'plant', text: "Hello! I'm your Bird's Nest Snake Plant 🪴. How are you?" }
+  ]);
+  const [chatInput, setChatInput] = useState("");
+
+  const handleChatSubmit = (e: any) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    const userMsg = chatInput.trim();
+    setChatMessages(prev => [...prev, { sender: 'user', text: userMsg }]);
+    setChatInput('');
+    
+    // Fake AI Plant response based on current state
+    setTimeout(() => {
+        let plantReply = "I'm just chilling.";
+        const cTemp = parseFloat(currentTemp);
+        const cSoil = parseFloat(currentSoil);
+        
+        if (userMsg.toLowerCase().includes("how are you") || userMsg.toLowerCase().includes("status")) {
+            if (cSoil < 15) plantReply = "I'm feeling a bit thirsty, my soil is pretty dry!";
+            else if (cSoil > 60) plantReply = "I'm drowning! My soil is too wet!";
+            else plantReply = "I'm perfectly happy actually. Good temperature and dry-ish soil.";
+        } else if (userMsg.toLowerCase().includes("water")) {
+            if (cSoil < 15) plantReply = "Yes please, lightly! But not too much.";
+            else plantReply = "No need! Snake plants hate overwatering. Give me some time to dry out.";
+        } else if (userMsg.toLowerCase().includes("joke")) {
+            plantReply = "Why don't plants like math? Because it gives them square roots! 🌿";
+        } else if (userMsg.toLowerCase().includes("hello") || userMsg.toLowerCase().includes("hi")) {
+            plantReply = "Hey there! Still photosynthesizing ☀️.";
+        } else {
+            plantReply = "Interesting... well as a plant, I mostly only think about sunlight and water. But tell me more!";
+        }
+        setChatMessages(prev => [...prev, { sender: 'plant', text: plantReply }]);
+    }, 800);
+  };
 
   // Daily averages (past 7 days)
   const [dailyAverages, setDailyAverages] = useState<any[]>([]);
@@ -937,6 +975,7 @@ const Dashboard = () => {
           let predictedSoilSource = "--";
           let predictedWatering = "--";
           let predictedWateringReason = "--";
+          let predictedHoursToWater = "--";
           let predChartData = null;
 
           if (latest) {
@@ -953,6 +992,15 @@ const Dashboard = () => {
             // Predict soil % — Snake Plant: rain barely matters since it's indoors
             predictedSoil = `${Math.min(100, Math.max(0, Math.round(latest.soil + soilDelta + (rain ? 1 : 0))))}%`;
             predictedSoilSource = rain ? "Rain expected (minimal indoor impact)" : "Trend-based prediction";
+
+            if (latest.soil <= 10) {
+              predictedHoursToWater = "Now";
+            } else if (soilTrend.slope < -0.01) {
+              const hoursUntilDry = Math.abs((latest.soil - 10) / (soilTrend.slope * 4));
+              predictedHoursToWater = `~${Math.round(hoursUntilDry)} hrs`;
+            } else {
+              predictedHoursToWater = "Days away";
+            }
 
             // Snake Plant: only water when soil < 10%, and only every 1-2 weeks
             if (rain) {
@@ -1004,6 +1052,7 @@ const Dashboard = () => {
           setPredSoilSource(predictedSoilSource);
           setPredWatering(predictedWatering);
           setPredWateringReason(predictedWateringReason);
+          setHoursUntilWater(predictedHoursToWater);
           setPredictionChartData(predChartData);
         } else {
           setMlTrend("--");
@@ -1021,6 +1070,7 @@ const Dashboard = () => {
           setPredSoilSource("--");
           setPredWatering("--");
           setPredWateringReason("--");
+          setHoursUntilWater("--");
           setPredictionChartData(null);
         }
       }
@@ -1095,6 +1145,74 @@ const Dashboard = () => {
         } catch (e) { /* ignore */ }
       };
     }, [supabase]);
+
+  // Weekly Context and Recommendation logic (based on weather & sensors)
+  const smartRecommendation = useMemo(() => {
+    if (!weather || !sensorReadings || sensorReadings.length === 0) return null;
+    const latest = sensorReadings[sensorReadings.length - 1];
+    const isRaining = weather.weather?.[0]?.main?.toLowerCase().includes('rain') || weather.rain;
+    const isHot = weather.main?.temp > 32;
+    
+    if (isRaining && latest.soil < 20) {
+      return { msg: "It's raining outside, so humidity will bump. Skip watering your Snake Plant today even if the soil is dry.", icon: "🌧️" };
+    } else if (isHot && latest.temp > 28) {
+      return { msg: "A heatwave is passing! Ensure your plant isn't getting baked by direct, focused sunlight in the afternoon.", icon: "☀️" };
+    } else if (latest.humidity > 70) {
+      return { msg: "High ambient humidity. Snake Plants don't need much water when the air is this wet.", icon: "💨" };
+    } else if (latest.soil <= 15) {
+      return { msg: "Conditions are dry and optimal. Your plant might appreciate a light watering tomorrow.", icon: "💧" };
+    } else {
+      return { msg: "Weather conditions are stable indoors and out. Your plant is resting peacefully.", icon: "🪴" };
+    }
+  }, [weather, sensorReadings]);
+
+  // Game/Streak variables (derived from historical weekly averages)
+  const currentStreak = useMemo(() => {
+    if (!weeklyHealthAverages.length) return 0;
+    let streak = 0;
+    // Iterate forwards from oldest week to newest week (assuming weeklyHealthAverages are newest-first already? Actually they are oldest-first based on the UI rendering reversed or newest-first? Let's assume the state array maps oldest-to-newest if we pull from the start, or newest-to-oldest. Let's just check the last N days from dailyAverages)
+    for (let i = dailyAverages.length - 1; i >= 0; i--) {
+      // Assuming dry-ish soil means healthy, and extreme temp means bad. Let's simplfy by checking if 'health' score would be > 80.
+      // (Using a simplified daily health logic since we don't store daily health explicitly yet)
+      const day = dailyAverages[i];
+      if (day.temp >= 15 && day.temp <= 30 && day.soil <= 60 && day.soil >= 5) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }, [dailyAverages]);
+
+  // Chart data for Daily Averages
+  const dailyChartData = useMemo(() => {
+    if (!dailyAverages || dailyAverages.length === 0) return null;
+    const labels = dailyAverages.map(d => d.day).reverse();
+    return {
+      labels,
+      datasets: [
+        { label: 'Temp °C', data: dailyAverages.map(d => d.temp).reverse(), borderColor: '#f87171', backgroundColor: '#f87171', tension: 0.3 },
+        { label: 'Soil %', data: dailyAverages.map(d => d.soil).reverse(), borderColor: '#22d3ee', backgroundColor: '#22d3ee', tension: 0.3 },
+        { label: 'Light %', data: dailyAverages.map(d => d.light).reverse(), borderColor: '#fbbf24', backgroundColor: '#fbbf24', tension: 0.3 },
+        { label: 'Humidity %', data: dailyAverages.map(d => d.humidity).reverse(), borderColor: '#a78bfa', backgroundColor: '#a78bfa', tension: 0.3 }
+      ]
+    };
+  }, [dailyAverages]);
+
+  // Chart data for Weekly Averages
+  const weeklyChartData = useMemo(() => {
+    if (!weeklyHealthAverages || weeklyHealthAverages.length === 0) return null;
+    const labels = weeklyHealthAverages.map(w => w.week).reverse();
+    return {
+      labels,
+      datasets: [
+        { label: 'Health Score', data: weeklyHealthAverages.map(w => w.health).reverse(), borderColor: '#4ade80', backgroundColor: '#4ade80', tension: 0.3, fill: true },
+        { label: 'Avg Temp °C', data: weeklyHealthAverages.map(w => w.avgTemp).reverse(), borderColor: '#f87171', backgroundColor: '#f87171', tension: 0.3, borderDash: [5, 5] },
+        { label: 'Avg Soil %', data: weeklyHealthAverages.map(w => w.avgSoil).reverse(), borderColor: '#22d3ee', backgroundColor: '#22d3ee', tension: 0.3, borderDash: [5, 5] },
+        { label: 'Avg Hum %', data: weeklyHealthAverages.map(w => w.avgHum).reverse(), borderColor: '#a78bfa', backgroundColor: '#a78bfa', tension: 0.3, borderDash: [5, 5] }
+      ]
+    };
+  }, [weeklyHealthAverages]);
 
   return (
     <>
@@ -1213,6 +1331,63 @@ const Dashboard = () => {
               <span className={`health-tip tip-${tip.type}`} key={idx}>{tip.text}</span>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Digital Twin & Plant Chat */}
+      <section className="stats-container" style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+        {/* Avatar */}
+        <div className="card" style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(145deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9))' }}>
+          <h3 style={{ alignSelf: 'flex-start', width: '100%', marginBottom: '1rem' }}>🪴 Digital Twin</h3>
+          <div style={{
+            width: '160px', height: '160px', borderRadius: '50%',
+            background: parseInt(healthScore) > 70 ? 'rgba(74, 222, 128, 0.1)' : parseInt(healthScore) > 40 ? 'rgba(251, 191, 36, 0.1)' : 'rgba(248, 113, 113, 0.1)',
+            border: `4px solid ${parseInt(healthScore) > 70 ? '#4ade80' : parseInt(healthScore) > 40 ? '#fbbf24' : '#f87171'}`,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            boxShadow: `0 0 20px ${parseInt(healthScore) > 70 ? 'rgba(74,222,128,0.2)' : parseInt(healthScore) > 40 ? 'rgba(251,191,36,0.2)' : 'rgba(248,113,113,0.2)'}`,
+            transition: 'all 0.3s ease'
+          }}>
+            <div style={{ fontSize: '4rem', filter: parseInt(healthScore) < 50 ? 'grayscale(100%)' : 'none' }}>
+              {parseInt(healthScore) < 40 ? '🥀' : '🪴'}
+            </div>
+            <div style={{ marginTop: 8, fontSize: '1.5rem', fontWeight: 'bold' }}>
+              {parseInt(healthScore) > 80 ? '(^_^)' : parseInt(healthScore) > 50 ? '(._.)' : '(>_<)'}
+            </div>
+          </div>
+          <div style={{ marginTop: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>
+            {parseInt(healthScore) > 80 ? "I'm thriving!" : parseInt(healthScore) > 50 ? "I could use some care." : "Help me, I'm struggling!"}
+          </div>
+        </div>
+
+        {/* Chat Widget */}
+        <div className="card" style={{ flex: '2 1 400px', display: 'flex', flexDirection: 'column', height: '350px' }}>
+          <h3 style={{ marginBottom: '1rem' }}>💬 Chat with your Plant</h3>
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '10px', marginBottom: '1rem' }}>
+            {chatMessages.map((msg, i) => (
+              <div key={i} style={{
+                alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                background: msg.sender === 'user' ? '#3b82f6' : 'rgba(255,255,255,0.05)',
+                color: '#fff', padding: '10px 14px', borderRadius: '12px',
+                borderBottomRightRadius: msg.sender === 'user' ? '2px' : '12px',
+                borderBottomLeftRadius: msg.sender === 'plant' ? '2px' : '12px',
+                maxWidth: '80%', fontSize: '0.9rem'
+              }}>
+                {msg.text}
+              </div>
+            ))}
+          </div>
+          <form onSubmit={handleChatSubmit} style={{ display: 'flex', gap: '10px' }}>
+            <input 
+              type="text" 
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Ask me how I feel, or for a joke..."
+              style={{ flex: 1, padding: '10px 16px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.2)', color: '#fff', outline: 'none' }}
+            />
+            <button type="submit" style={{ padding: '10px 20px', borderRadius: '24px', background: '#ec4899', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+              Send
+            </button>
+          </form>
         </div>
       </section>
 
@@ -1359,6 +1534,11 @@ const Dashboard = () => {
               <div className="pred-label">Watering Need</div>
               <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4 }} id="predWateringReason">{predWateringReason}</div>
             </div>
+            <div className="prediction-card">
+              <div className="pred-value" style={{ color: '#fbbf24' }}>{hoursUntilWater}</div>
+              <div className="pred-label">Time to Water</div>
+              <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4 }}>Based on drying rate</div>
+            </div>
           </div>
           {predictionChartData && (
             <ChartLine
@@ -1398,6 +1578,25 @@ const Dashboard = () => {
         {/* Daily Averages (Past 7 Days) */}
         <div className="card">
           <h3>📅 Daily Averages (Past 7 Days)</h3>
+          {dailyChartData && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <ChartLine
+                data={dailyChartData}
+                options={{
+                  responsive: true,
+                  plugins: {
+                    legend: { labels: { color: '#e2e8f0', font: { size: 12 } } },
+                    title: { display: false }
+                  },
+                  scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                  },
+                  interaction: { mode: 'index', intersect: false }
+                }}
+              />
+            </div>
+          )}
           {dailyAverages.length > 0 ? (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
@@ -1433,6 +1632,25 @@ const Dashboard = () => {
         {/* Weekly Health Averages (Past 7 Weeks) */}
         <div className="card">
           <h3>📊 Weekly Health Overview (Past 7 Weeks)</h3>
+          {weeklyChartData && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <ChartLine
+                data={weeklyChartData}
+                options={{
+                  responsive: true,
+                  plugins: {
+                    legend: { labels: { color: '#e2e8f0', font: { size: 12 } } },
+                    title: { display: false }
+                  },
+                  scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                  },
+                  interaction: { mode: 'index', intersect: false }
+                }}
+              />
+            </div>
+          )}
           {weeklyHealthAverages.length > 0 ? (
             <div>
               {weeklyHealthAverages.map((w, idx) => {
@@ -1531,6 +1749,60 @@ const Dashboard = () => {
               <p className="analysis-empty">Collecting enough readings to show formulas and intermediate values.</p>
             )}
           </div>
+        </div>
+
+        {/* Smart Weather-Aware Recommendations */}
+        {smartRecommendation && (
+          <div className="card" style={{ background: 'linear-gradient(145deg, rgba(74, 222, 128, 0.1), rgba(30, 41, 59, 1))', borderColor: 'rgba(74, 222, 128, 0.2)' }}>
+            <h3>🌎 Smart Weather-Aware Advice</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '10px' }}>
+              <div style={{ fontSize: '3rem' }}>{smartRecommendation.icon}</div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '1.05rem', color: '#e2e8f0', lineHeight: 1.5 }}>
+                  {smartRecommendation.msg}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Gamification: Care Streak & Score */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <h3>🏆 Care Streaks & Lifetime Score</h3>
+          <div style={{ display: 'flex', gap: '20px', marginTop: '15px' }}>
+            <div style={{ flex: 1, padding: '20px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🔥</div>
+              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#fbbf24' }}>{currentStreak} <span style={{ fontSize: '1rem', color: '#94a3b8' }}>Days</span></div>
+              <div style={{ color: '#e2e8f0', marginTop: '4px', fontSize: '0.9rem' }}>Current Optimal Streak</div>
+            </div>
+            
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#4ade80' }}>
+                  {healthScore === '--' ? '0' : healthScore}
+                </span>
+                <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Perfect Target</span>
+              </div>
+              <div style={{ width: '120px', height: '120px' }}>
+                <Doughnut 
+                  data={{
+                    datasets: [{
+                      data: [parseInt(healthScore === '--' ? '0' : healthScore), 100 - parseInt(healthScore === '--' ? '0' : healthScore)],
+                      backgroundColor: ['#4ade80', 'rgba(255,255,255,0.05)'],
+                      borderWidth: 0,
+                      cutout: '80%'
+                    }]
+                  }}
+                  options={{ responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: { enabled: false } } }}
+                />
+              </div>
+            </div>
+          </div>
+          {currentStreak >= 7 && (
+            <div style={{ marginTop: '15px', color: '#4ade80', textAlign: 'center', fontWeight: 'bold', padding: '10px', background: 'rgba(74, 222, 128, 0.1)', borderRadius: '8px' }}>
+              🎉 Incredible! A 7+ day perfect care streak! You rule!
+            </div>
+          )}
         </div>
       </main>
 
