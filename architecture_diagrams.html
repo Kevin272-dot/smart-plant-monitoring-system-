@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Plant Monitoring - Architecture Diagrams & Tables</title>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ 
+          startOnLoad: true, 
+          theme: "neutral",
+          fontFamily: "system-ui, -apple-system, sans-serif",
+          flowchart: { curve: "basis" }
+      });
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #f7f9fc;
+            color: #333;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 40px;
+        }
+        .diagram-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 1px solid #e1e4e8;
+            position: relative;
+        }
+        .diagram-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 10px;
+        }
+        .diagram-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #34495e;
+            margin: 0;
+            padding: 0;
+            border: none;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            background-color: white; 
+            padding: 20px;
+        }
+        .table-wrapper {
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+            text-align: left;
+            margin: 0 auto;
+        }
+        th, td {
+            padding: 12px 15px;
+            border: 1px solid #e1e4e8;
+        }
+        th {
+            background-color: #f8fafc;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background-color: #fafbfc;
+        }
+        .instructions {
+            background: #e1f5fe;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin-bottom: 30px;
+            border-radius: 4px;
+            font-size: 0.95rem;
+        }
+        .download-btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .download-btn:hover {
+            background-color: #2980b9;
+        }
+        .download-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>System Architecture Diagrams & Tables</h1>
+    <div class="instructions">
+        <strong>How to use:</strong> Click the "Download PNG" button next to any diagram or table to instantly save a transparent, high-resolution image perfect for pasting directly into your Word Report.
+    </div>
+
+    <!-- DIAGRAM 1 -->
+    <div class="diagram-container">
+        <div class="diagram-header">
+            <h2 class="diagram-title">1. Overall System Architecture</h2>
+            <button class="download-btn" onclick="downloadDiagram('mermaid-1', 'system_architecture')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download PNG
+            </button>
+        </div>
+        <div class="mermaid" id="mermaid-1">
+            graph LR
+                subgraph Sensor Layer
+                    esp[ESP32 Dev Board<br/>DHT22, Soil, LDR, OLED]
+                end
+                
+                subgraph Cloud Backend
+                    db[(Supabase PostgreSQL<br/>readings and alerts)]
+                    edge[Edge Functions<br/>soil_alert, daily_report]
+                    db --- edge
+                end
+                
+                subgraph User Interface
+                    ui[React Dashboard<br/>Charts and Analytics]
+                end
+                
+                subgraph External Services
+                    sms[Twilio SMS API]
+                    weather[OpenWeatherMap]
+                end
+
+                esp -- "HTTP POST" --> db
+                db -. "REST / SSE" .-> ui
+                edge -- "Triggers" --> sms
+                edge -- "Fetches" --> weather
+                
+                style esp fill:#fff,stroke:#cbd5e1,stroke-width:2px
+                style db fill:#fff,stroke:#cbd5e1,stroke-width:2px
+                style edge fill:#fff,stroke:#cbd5e1,stroke-width:2px
+                style ui fill:#fff,stroke:#cbd5e1,stroke-width:2px
+                style sms fill:#fff,stroke:#cbd5e1,stroke-width:2px
+                style weather fill:#fff,stroke:#cbd5e1,stroke-width:2px
+        </div>
+    </div>
+
+    <!-- TABLE 1 -->
+    <div class="diagram-container">
+        <div class="diagram-header">
+            <h2 class="diagram-title">2. Technology Stack Selection</h2>
+            <button class="download-btn" onclick="downloadTable('table-1', 'technology_stack')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download PNG
+            </button>
+        </div>
+        <div class="table-wrapper" id="table-1">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Architectural Layer</th>
+                        <th>Specific Technology</th>
+                        <th>Functional Purpose</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Hardware</strong></td>
+                        <td>ESP32, DHT22, Soil Sensor, LDR, OLED</td>
+                        <td>Collect empirical ambient data and display live on-device diagnostic values.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Embedded Firmware</strong></td>
+                        <td>C++ / Network polling + HTTP client</td>
+                        <td>Periodically retrieve analog/digital signals and construct JSON cloud payloads.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Cloud Database</strong></td>
+                        <td>Supabase (PostgreSQL)</td>
+                        <td>Provide highly secure, persistent telemetry storage with deeply integrated real-time subscription capabilities.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Backend Compute</strong></td>
+                        <td>Deno Edge Functions</td>
+                        <td>Execute ultra-fast, serverless logic exactly when new database rows are successfully committed.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Frontend Network</strong></td>
+                        <td>React 18 + TypeScript + Vite</td>
+                        <td>Serve an interactive, asynchronous DOM architecture capable of handling heavy temporal data arrays rapidly.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Data Visualization</strong></td>
+                        <td>Chart.js + react-chartjs-2</td>
+                        <td>Render complex time-series telemetry overlays into easily digestible graphical matrices.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>User Alerting</strong></td>
+                        <td>Twilio SMS REST API</td>
+                        <td>Dispatch instantaneous, un-tethered critical notifications to offline human operators.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Weather APIs</strong></td>
+                        <td>OpenWeatherMap API</td>
+                        <td>Contextualize botanical reports by injecting hyper-local atmospheric forecasts and precipitation data.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Global Deployment</strong></td>
+                        <td>Vercel (Frontend), Supabase (Backend)</td>
+                        <td>Facilitate automated Continuous Integration (CI) and global edge-cached Content Delivery Networks (CDN).</td>
+                    </tr>
+                    <tr>
+                        <td><strong>System Security</strong></td>
+                        <td>JWT, RLS, Secret Management</td>
+                        <td>Defend unauthorized ingress via rigorous structural Row-Level Security rules.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
+    <!-- DIAGRAM 2 -->
+    <div class="diagram-container">
+        <div class="diagram-header">
+            <h2 class="diagram-title">3. Embedded Firmware Data Flow</h2>
+            <button class="download-btn" onclick="downloadDiagram('mermaid-2', 'firmware_data_flow')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download PNG
+            </button>
+        </div>
+        <div class="mermaid" id="mermaid-2">
+            graph TD
+                A[Hardware Sensors<br/>ESP32] -->|HTTP POST readings| B[(Supabase DB)]
+                B -->|Real-time Sync| C[React Dashboard]
+                B -->|Database Trigger| D[soil_alert Edge Function]
+                D -->|Log History| E[(Alerts Table)]
+                D -->|Dispatch API| F[Twilio SMS Service]
+                
+                style A fill:#fff,stroke:#94a3b8,stroke-width:2px
+                style B fill:#e2e8f0,stroke:#64748b,stroke-width:2px
+                style C fill:#fff,stroke:#94a3b8,stroke-width:2px
+                style D fill:#fff,stroke:#94a3b8,stroke-width:2px
+                style E fill:#e2e8f0,stroke:#64748b,stroke-width:2px
+                style F fill:#fff,stroke:#94a3b8,stroke-width:2px
+        </div>
+    </div>
+
+    <!-- DIAGRAM 3 -->
+    <div class="diagram-container">
+        <div class="diagram-header">
+            <h2 class="diagram-title">4. Relational Database ERD</h2>
+            <button class="download-btn" onclick="downloadDiagram('mermaid-3', 'database_erd')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download PNG
+            </button>
+        </div>
+        <div class="mermaid" id="mermaid-3">
+            erDiagram
+                READINGS ||--o{ ALERTS : triggers
+                
+                READINGS {
+                    int id PK
+                    int soil_moisture
+                    int light_intensity
+                    float temperature
+                    float humidity
+                    timestamptz timestamp
+                }
+                
+                ALERTS {
+                    int id PK
+                    int reading_id FK
+                    string alert_type
+                    string severity
+                    text message
+                    timestamptz triggered_at
+                }
+        </div>
+    </div>
+
+    <!-- TABLE 2 -->
+    <div class="diagram-container">
+        <div class="diagram-header">
+            <h2 class="diagram-title">5. Database Security Implementation</h2>
+            <button class="download-btn" onclick="downloadTable('table-2', 'security_implementation')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download PNG
+            </button>
+        </div>
+        <div class="table-wrapper" id="table-2">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Security Measure</th>
+                        <th>Technological Implementation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Row-Level Security (RLS)</strong></td>
+                        <td>Explicitly enabled exclusively rejecting unauthenticated write or delete attempts over both the readings and alerts schemas.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>JWT Authentication</strong></td>
+                        <td>Internal programmatic verification ensuring interactions validate via Supabase cryptographic json-web-tokens.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Key Segmentation</strong></td>
+                        <td>Firm separation of the public Anon key (utilized actively by the React client) versus the internal Service Role key securely isolated strictly for backend triggers.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Environment Variable Management</strong></td>
+                        <td>Absolute reliance on deeply encrypted .env injections inside the Vercel architecture, avoiding fully hardcoded raw API keys.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
+    <!-- DIAGRAM 4 -->
+    <div class="diagram-container">
+         <div class="diagram-header">
+            <h2 class="diagram-title">6. Twilio Notification and Cooldown Pipeline</h2>
+            <button class="download-btn" onclick="downloadDiagram('mermaid-4', 'twilio_pipeline')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download PNG
+            </button>
+        </div>
+        <div class="mermaid" id="mermaid-4">
+            graph TD
+                A([New DB Reading]) --> B[Evaluate Thresholds]
+                B --> C{Violates Optimal Range?}
+                
+                C -->|No| D([Terminate / Normal])
+                
+                C -->|Yes| E{30-Min Cooldown Active?}
+                
+                E -->|Yes| F([Discard / Prevent Spam])
+                
+                E -->|No| G[Generate Alert Entry]
+                G --> H[POST to Twilio API]
+                H --> I([User Receives SMS])
+                
+                style C fill:#fef3c7,stroke:#94a3b8
+                style E fill:#fef3c7,stroke:#94a3b8
+                style A fill:#e0f2fe,stroke:#38bdf8
+                style I fill:#dcfce3,stroke:#34d399
+        </div>
+    </div>
+
+    <!-- TABLE 3 -->
+    <div class="diagram-container">
+        <div class="diagram-header">
+            <h2 class="diagram-title">7. Biological Thresholds (Snake Plant)</h2>
+            <button class="download-btn" onclick="downloadTable('table-3', 'biological_thresholds')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download PNG
+            </button>
+        </div>
+        <div class="table-wrapper" id="table-3">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Empirical Sensor Array</th>
+                        <th>Explicit Critical Low</th>
+                        <th>Warning Deviation Low</th>
+                        <th>Target Optimal Range</th>
+                        <th>Warning Deviation High</th>
+                        <th>Explicit Critical High</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td> <strong>Volumetric Soil Moisture</strong></td>
+                        <td>&lt; 5% Cap</td>
+                        <td>&lt; 10% Bracket</td>
+                        <td><strong>10% � 80% Saturation</strong></td>
+                        <td>&gt; 80% Overwatered</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td> <strong>Ambient Room Temperature</strong></td>
+                        <td>&lt; 10C</td>
+                        <td>&lt; 15C</td>
+                        <td><strong>15C � 29C Thermal</strong></td>
+                        <td>&gt; 35C</td>
+                        <td>&gt; 40C Danger</td>
+                    </tr>
+                    <tr>
+                        <td> <strong>Environmental Ambient Light</strong></td>
+                        <td>N/A</td>
+                        <td>&lt; 5% Footprint</td>
+                        <td><strong>10% � 80% Range</strong></td>
+                        <td>N/A</td>
+                        <td>&gt; 90% Burning</td>
+                    </tr>
+                    <tr>
+                        <td> <strong>Percentage Free Humidity</strong></td>
+                        <td>N/A</td>
+                        <td>&lt; 30% Arid Limit</td>
+                        <td><strong>30% � 50% Baseline</strong></td>
+                        <td>&gt; 80% Supersaturated</td>
+                        <td>N/A</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
+    <!-- DIAGRAM 5 -->
+    <div class="diagram-container">
+        <div class="diagram-header">
+            <h2 class="diagram-title">8. Production Deployment Pipeline</h2>
+            <button class="download-btn" onclick="downloadDiagram('mermaid-5', 'deployment_pipeline')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download PNG
+            </button>
+        </div>
+        <div class="mermaid" id="mermaid-5">
+            graph LR
+                subgraph Vercel
+                    ui[React App] --> vite[Vite Build]
+                    vite --> cdn[Edge CDN and SSL]
+                end
+                
+                subgraph Supabase Cloud
+                    api[REST Auth and API]
+                    db[(PostgreSQL)]
+                    db --- api
+                end
+                
+                cdn <-->|"Secure HTTPS"| api
+                
+                style ui fill:#fff,stroke:#cbd5e1,stroke-width:2px
+                style vite fill:#fff,stroke:#cbd5e1,stroke-width:2px
+                style cdn fill:#fff,stroke:#cbd5e1,stroke-width:2px
+                style api fill:#fff,stroke:#cbd5e1,stroke-width:2px
+                style db fill:#e2e8f0,stroke:#64748b,stroke-width:2px
+        </div>
+    </div>
+
+    <!-- TABLE 4 -->
+    <div class="diagram-container">
+        <div class="diagram-header">
+            <h2 class="diagram-title">9. Hardware Components Table</h2>
+            <button class="download-btn" onclick="downloadTable('table-4', 'hardware_components')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download PNG
+            </button>
+        </div>
+        <div class="table-wrapper" id="table-4">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Hardware Component</th>
+                        <th>Functionality / Purpose</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>ESP32 Development Board</strong></td>
+                        <td>Acts as the central IoT processing hub. Reads analog/digital signals and uses integrated 802.11 Wi-Fi to push telemetry payloads to the Cloud.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>DHT22 Sensor</strong></td>
+                        <td>A precise digital sensor capturing both ambient room temperature and surrounding atmospheric relative humidity.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Soil Moisture Probe</strong></td>
+                        <td>Measures localized capacitance or resistive electrical changes to output exact volumetric hydration levels in the potting soil.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>LDR (Light Dependent Resistor)</strong></td>
+                        <td>Detects raw ambient light intensity to digitally evaluate direct and indirect solar exposure footprints.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>I2C OLED Display</strong></td>
+                        <td>Local visualization screen providing instantaneous status readouts directly on the physical hardware for at-a-glance monitoring.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
+    <!-- TABLE 5 -->
+    <div class="diagram-container">
+        <div class="diagram-header">
+            <h2 class="diagram-title">10. Software & Cloud Stack Table</h2>
+            <button class="download-btn" onclick="downloadTable('table-5', 'software_components')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download PNG
+            </button>
+        </div>
+        <div class="table-wrapper" id="table-5">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Software / Service</th>
+                        <th>Implementation / Purpose</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Supabase & PostgreSQL</strong></td>
+                        <td>Acts as the highly relational, secure main datastore. Uses Row-Level Security and robust triggers to capture readings securely.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Deno Edge Functions</strong></td>
+                        <td>Serverless scripts that run instantly on database inserts. Responsible for rule evaluation and firing external REST requests.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>React 18 & Vite</strong></td>
+                        <td>Powers the lightning-fast, reactive Web Dashboard UI, utilizing Server-Sent Events to render zero-latency updates to users.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Twilio API</strong></td>
+                        <td>External REST telecom service utilized specifically by Edge Functions to route asynchronous, predictive SMS alerts to human operators.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>OpenWeatherMap API</strong></td>
+                        <td>Pulled periodically into chronological reports to generate forward-looking, weather-aware hydration predictions based on local heatwaves.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function downloadDiagram(containerId, filename) {
+            try {
+                const container = document.getElementById(containerId);
+                const svgElement = container.querySelector("svg");
+                
+                if (!svgElement) {
+                    alert("Please wait for the diagram to finish rendering.");
+                    return;
+                }
+
+                const clonedSvg = svgElement.cloneNode(true);
+                clonedSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+                clonedSvg.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+
+                let viewBox = clonedSvg.getAttribute("viewBox");
+                let svgWidth = svgElement.getBoundingClientRect().width || 800;
+                let svgHeight = svgElement.getBoundingClientRect().height || 600;
+                
+                if (viewBox) {
+                    const vbParts = viewBox.split(" ");
+                    svgWidth = parseFloat(vbParts[2]);
+                    svgHeight = parseFloat(vbParts[3]);
+                }
+                
+                clonedSvg.setAttribute("width", svgWidth);
+                clonedSvg.setAttribute("height", svgHeight);
+
+                const svgData = new XMLSerializer().serializeToString(clonedSvg);
+                const svgUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
+                
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.onload = function() {
+                    const canvas = document.createElement("canvas");
+                    const ctx = canvas.getContext("2d");
+                    
+                    const scale = 3;
+                    canvas.width = svgWidth * scale;
+                    canvas.height = svgHeight * scale;
+                    
+                    ctx.fillStyle = "white";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    const pngUrl = canvas.toDataURL("image/png");
+                    triggerDownload(pngUrl, filename);
+                };
+                img.src = svgUrl;
+            } catch (err) {
+                console.error(err);
+                alert("Something went wrong with the SVG download.");
+            }
+        }
+        
+        function downloadTable(containerId, filename) {
+            const tableElement = document.getElementById(containerId);
+            
+            // html2canvas is imported in the head script specifically to render standard HTML blocks into graphic canvas elements
+            html2canvas(tableElement, {
+                scale: 3, 
+                backgroundColor: "#ffffff",
+                logging: false,
+                useCORS: true
+            }).then(canvas => {
+                const pngUrl = canvas.toDataURL("image/png");
+                triggerDownload(pngUrl, filename);
+            }).catch(err => {
+                console.error("Table generation error:", err);
+                alert("Failed to render table to PNG.");
+            });
+        }
+        
+        function triggerDownload(dataUrl, filename) {
+            const downloadLink = document.createElement("a");
+            downloadLink.download = filename + ".png";
+            downloadLink.href = dataUrl;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
+    </script>
+</body>
+</html>

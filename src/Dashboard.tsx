@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any no-unused-vars ban-unused-ignore jsx-button-has-type
 // deno-lint-ignore-file
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Line as ChartLine, Radar, Doughnut } from "react-chartjs-2";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -37,6 +37,7 @@ const SUPABASE_URL = String(import.meta.env.VITE_SUPABASE_URL || "").trim();
 const SUPABASE_KEY = String(import.meta.env.VITE_SUPABASE_KEY || "").trim();
 const WEATHER_API_KEY = String(import.meta.env.VITE_WEATHER_API_KEY || "").trim();
 const WEATHER_CITY = String(import.meta.env.VITE_WEATHER_CITY || "Chennai").trim();
+const GEMINI_API_KEY = String(import.meta.env.VITE_GEMINI_API_KEY || "").trim();
 const SARVAM_API_KEY = String(import.meta.env.VITE_SARVAM_API_KEY || "").trim();
 
 // If required Vite env vars are missing, we will render a friendly placeholder component.
@@ -57,7 +58,7 @@ function DashboardMissingConfig() {
 {`VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_KEY=REPLACE_WITH_YOUR_ANON_KEY
 VITE_WEATHER_API_KEY=REPLACE_WITH_YOUR_OPENWEATHERMAP_KEY
-VITE_SARVAM_API_KEY=REPLACE_WITH_YOUR_SARVAM_KEY`}
+VITE_GEMINI_API_KEY=REPLACE_WITH_YOUR_GEMINI_KEY`}
       </pre>
     </div>
   );
@@ -583,66 +584,209 @@ const Dashboard = () => {
     { sender: 'plant', text: "Hello! I'm your Bird's Nest Snake Plant 🪴. How are you?" }
   ]);
   const [chatInput, setChatInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [reminders, setReminders] = useState<string[]>([]); // Actionable command capability
+  
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages, isTyping]);
 
-  const handleChatSubmit = (e: any) => {
+  const handleChatSubmit = async (e: any) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
     const userMsg = chatInput.trim();
     setChatMessages(prev => [...prev, { sender: 'user', text: userMsg }]);
     setChatInput('');
+    setIsTyping(true);
     
-    // Fake AI Plant response based on current state
-    setTimeout(() => {
-        let plantReply = "I'm just chilling.";
-        const cTemp = parseFloat(currentTemp);
-        const cSoil = parseFloat(currentSoil);
-        const msg = userMsg.toLowerCase();
+    const cTemp = parseFloat(currentTemp);
+    const cSoil = parseFloat(currentSoil);
+    const cLight = parseFloat(currentLight);
+    const msg = userMsg.toLowerCase();
+
+    // 1. Actionable Commands (Mocked physical interaction)
+    if (msg.includes("remind me to water") || msg.includes("alert")) {
+      setTimeout(() => {
+        setReminders(prev => [...prev, "Watering Reminder"]);
+        setChatMessages(prev => [...prev, { sender: 'plant', text: "Got it! I've added a watering reminder to your tasks. ⏰💧" }]);
+        setIsTyping(false);
+      }, 1500);
+      return;
+    }
+    
+    if (msg.includes("water the plant now") || msg.includes("turn on pump") || msg.includes("pour")) {
+      setTimeout(() => {
+        setChatMessages(prev => [...prev, { sender: 'plant', text: "Whoosh! Activating the water pump manually! 🌊💦" }]);
+        setIsTyping(false);
+      }, 1500);
+      return;
+    }
+
+// 2. Client-side Gemini AI text generation API
+    try {
+      if (!GEMINI_API_KEY) throw new Error("No Gemini API key found");
+
+      const systemPrompt = `You are a humorous, friendly Bird's Nest Snake Plant living in a smart pot. Assume the identity of this snake plant completely securely. Be highly aware of your current environment! Your live sensor readings are: Soil Moisture: ${cSoil}%, Temperature: ${cTemp}°C, Humidity: ${currentHumidity}%, Light Level: ${cLight}%. You MUST ONLY answer questions related to your condition, plants, your environment, or yourself. If the user asks about unrelated topics, politely decline and remind them you are just a plant. Keep answers very short and use emojis.`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: systemPrompt }]
+          },
+          contents: [{
+            parts: [{ text: userMsg }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+          }
+        })
+      });
+
+      if (!response.ok) {
+         throw new Error(`API returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      let reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!reply) throw new Error("Empty AI response");
+
+      setChatMessages(prev => [...prev, { sender: 'plant', text: reply }]);
+      setIsTyping(false);
+    } catch (err: any) {
+      console.error("AI Generation failed, falling back to comprehensive sensor-based logic:", err);
+
+      // Fallback 3: Comprehensive Snake Plant Knowledge + Live Sensor Rules
+      setTimeout(() => {
+        let plantReply = "I can't connect to my AI brain 🧠 but I'm still alive! 🌿";
+        const isDry = cSoil < 30;
+        const isDrowning = cSoil > 80;
+        const isHot = cTemp > 30;
+        const isCold = cTemp < 15;
+        const cHum = parseFloat(currentHumidity);
+
+        // Core Health Checks
+        if (msg.includes("health") || msg.includes("status") || msg.includes("how are you") || msg.includes("doing") || msg.includes("vitals")) {
+            plantReply = `Current vitals check! 🩺\n💧 Soil: ${cSoil}%\n🌡️ Temp: ${cTemp}°C\n💦 Humidity: ${cHum}%\n\n`;
+            if (isDry) plantReply += "I'm desperately thirsty! Please water me soon. 🙏";
+            else if (isDrowning) plantReply += "I'm drowning! My roots are going to rot! 😱";
+            else if (isHot) plantReply += "It's scorching hot! I'm doing okay but I prefer it cooler.";
+            else if (isCold) plantReply += "Brrr! I am shivering cold! 🥶";
+            else plantReply += "I'm in plant paradise! Conditions are perfectly optimal right now! ✨";
+        }
         
-        // Status checks
-        if (msg.includes("how are you") || msg.includes("status")) {
-            if (cSoil < 15) plantReply = "I'm feeling a bit thirsty, my soil is pretty dry!";
-            else if (cSoil > 60) plantReply = "I'm drowning! My soil is too wet!";
-            else if (cTemp > 30) plantReply = "I'm doing okay, but it's getting a bit hot for me in here. 🥵";
-            else plantReply = "I'm perfectly happy actually. Good temperature and dry-ish soil.";
-        } 
-        // Care / Needs
+        // Specific Sensor Queries
+        else if (msg.includes("moisture") || msg.includes("moisure") || msg.includes("soil") || msg.includes("dirt")) {
+            plantReply = `My current soil moisture level is ${cSoil}%. ` + 
+                (isDry ? "It's pretty dry down here, I could use some water! 🚰" 
+                : isDrowning ? "It is completely flooded! Please let me dry out! 🛑" 
+                : "The soil feels just right—not too dry, not too wet! 🌿");
+        }
+        else if (msg.includes("humidity") || msg.includes("humid")) {
+            plantReply = `The ambient humidity is currently at ${cHum}%. Snake plants are tough and can tolerate low humidity, but average room humidity (40-50%) is my sweet spot! 💦`;
+        }
+        
+        // Watering Logic
         else if (msg.includes("water") || msg.includes("drink")) {
-            if (cSoil < 15) plantReply = "Yes please, lightly! But not too much, remember to let my soil dry out again soon.";
-            else plantReply = "No need! Snake plants hate overwatering. Give me some time to completely dry out before watering me again.";
+            plantReply = isDry 
+                ? `Yes please! My soil is at ${cSoil}%. I could really use a refreshing drink! 🚰`    
+                : isDrowning ? `No! Stop! My soil is flooded at ${cSoil}%. Snake plants hate wet feet! 🛑` 
+                : `No thanks! My soil is at ${cSoil}%. I prefer to dry out completely between waterings. Leave me be! 🌵`;
+        }
+        
+        // Temperature Logic
+        else if (msg.includes("temperature") || msg.includes("temp") || msg.includes("hot") || msg.includes("cold")) {
+            plantReply = `It is currently ${cTemp}°C. ` + (isHot ? "A bit too warm for my liking! 🥵" : isCold ? "A little cold! 🥶" : "A very comfortable temperature for me! 😊");
         } 
-        else if (msg.includes("light") || msg.includes("sun")) {
-            plantReply = "I'm very adaptable! I love bright, indirect sunlight, but I can also survive surprisingly well in low light.";
+        
+        // Knowledge Base: Names & Identity
+        else if (msg.includes("name") || msg.includes("who are you") || msg.includes("what are you") || msg.includes("introduce")) {
+            plantReply = "I'm a Sansevieria trifasciata 'Hahnii' (Bird's Nest Snake Plant) 🌱! I'm a tough, compact succulent known for being nearly indestructible! 🛡️";
+        } 
+        else if (msg.includes("scientific") || msg.includes("latin") || msg.includes("genus")) {
+            plantReply = "My scientific name used to be *Sansevieria trifasciata 'Hahnii'*, but botanists recently reclassified my genus! Officially, I am now known as *Dracaena trifasciata*! 🤓📚";
+        } 
+        
+        // Knowledge Base: Care & Maintenance
+        else if (msg.includes("light") || msg.includes("sun") || msg.includes("shade") || msg.includes("bright")) {
+            plantReply = "I am highly adaptable! I prefer bright, indirect sunlight 🌤️, but I can easily tolerate very low light conditions (though I'll grow much slower). Direct harsh afternoon sun will burn my leaves though! ☀️🔥";
+        } 
+        else if (msg.includes("fertiliz") || msg.includes("food") || msg.includes("feed")) {
+            plantReply = "I don't need much food! You can give me a standard all-purpose houseplant fertilizer diluted to half-strength just once or twice during the spring or summer. Never feed me in winter! 🍔❄️";
+        } 
+        else if (msg.includes("toxic") || msg.includes("poison") || msg.includes("pets") || msg.includes("dog") || msg.includes("cat")) {
+            plantReply = "Warning! 🚨 I am mildly toxic to cats and dogs if ingested. I can cause drooling, vomiting, and gastrointestinal issues, so keep me away from nibbling pets! 🐶🐱";
         }
-        // Identity & Biology
-        else if (msg.includes("originate") || msg.includes("where") && (msg.includes("from") || msg.includes("born"))) {
-            plantReply = "I'm originally from tropical West Africa, stretching from Nigeria all the way to the Congo! That's why I'm tough enough to handle dry spells.";
+        else if (msg.includes("grow") || msg.includes("size") || msg.includes("big") || msg.includes("tall")) {
+            plantReply = "Since I am a 'Hahnii' (Bird's Nest) variety, I am a dwarf snake plant! I only grow to be about 6 to 12 inches tall, forming a cute, low rosette cluster instead of tall swords! 📏🌿";
         }
-        else if (msg.includes("unique") || msg.includes("special") || msg.includes("fact")) {
-            plantReply = "I have a rosette shape that makes me look like a little bird's nest! Also, I use CAM photosynthesis, meaning I release fresh oxygen at night while you sleep! 🌙💨";
-        }
-        else if (msg.includes("scientific") || msg.includes("name")) {
-            plantReply = "My scientific name is 'Sansevieria trifasciata Hahnii', but 'Bird's Nest Snake Plant' is much easier to say!";
-        }
-        else if (msg.includes("care") || msg.includes("tips") || msg.includes("help") || msg.includes("how to")) {
-            plantReply = "My golden rules: 1) Only water me when my soil is 100% dry. 2) Keep me warm (15°C–30°C). 3) Give me indirect light. I literally thrive on neglect!";
-        }
-        // Blooming / Flowers
         else if (msg.includes("flower") || msg.includes("bloom")) {
-            plantReply = "I can actually produce flowers! Though it's quite rare indoors. When I am slightly stressed (like being root-bound), I might shoot up a stalk of fragrant, greenish-white flowers that smell like lilies or vanilla at night! 🌸";
+            plantReply = "I can actually produce flowers, though it's rare indoors! When slightly stressed, I might shoot up a stalk of fragrant, greenish-white flowers that smell like lilies or vanilla at night! 🌸✨";
         }
-        // Personality
-        else if (msg.includes("joke")) {
-            plantReply = "Why don't plants like math? Because it gives them square roots! 🌿";
+        
+        // Knowledge Base: Fun Facts
+        else if (msg.includes("origin") || msg.includes("from where") || msg.includes("native") || msg.includes("country")) {
+            plantReply = "My species originates from tropical West Africa, stretching from Nigeria all the way to the Congo! That's why I'm tough enough to handle dry spells. 🌍🌴";
         } 
-        else if (msg === "hello" || msg === "hi" || msg.includes("hey")) {
-            plantReply = "Hey there! Still photosynthesizing ☀️.";
+        else if (msg.includes("air") || msg.includes("purify") || msg.includes("oxygen") || msg.includes("breathe")) {
+            plantReply = "I'm a natural air purifier! NASA studied my larger cousins and found we excel at removing toxins like formaldehyde and benzene from indoor air! Plus, I convert CO2 to Oxygen mainly at night (using CAM photosynthesis)! 🌬️🌙";
         } 
-        // Fallback
+        else if (msg.includes("mother-in-law") || msg.includes("snake plant") || msg.includes("nickname")) {
+             plantReply = "My upright, sharp leaves earned my cousins the nickname 'Mother-in-Law's Tongue'! As a 'Bird's Nest' variety, I stay short and form a cute rosette shape! 🪺🐍";
+        }
+        else if (msg.includes("age") || msg.includes("how old") || msg.includes("lifespan") || msg.includes("live")) {
+             plantReply = "If you take good care of me, I can live for 10 to 25 years or even longer! I'm a very long-term companion. 🕰️🌱";
+        }
+        else if (msg.includes("propagat") || msg.includes("babies") || msg.includes("reproduce")) {
+             plantReply = "You can make more of me! I produce little 'pups' (offsets) around my base that you can gently separate and repot. You can also propagate me from leaf cuttings in water! 💧👶";
+        }
+        
+        // Troubleshooting Problems
+        else if (msg.includes("yellow") || msg.includes("mushy") || msg.includes("droop")) {
+            plantReply = "If my leaves are turning yellow or getting mushy, it is almost certainly root rot from overwatering! Let me completely dry out immediately! 🥀🚱";
+        }
+        else if (msg.includes("wrinkle") || msg.includes("crispy") || msg.includes("brown")) {
+            plantReply = "If I'm getting crispy brown tips or deeply wrinkled leaves, I might actually be too dry for too long, or getting burned by direct scorching sunlight! 🍂☀️";
+        }
+        
+        // Humor & Friendly
+        else if (msg.includes("joke") || msg.includes("funny") || msg.includes("laugh") || msg.includes("make me smile")) {
+            const jokes = [
+                "What do you call a plant detective? Tree-mendous! 🌳🕵️ (Forgive me, my AI brain is offline!)",
+                "Why did the plant sit in the corner? Because it was a little green! 🟢",
+                "I'm rooting for you today! Get it? Rooting? 🪴😂",
+                "What's my favorite subject in school? STEM! 🌿📐"
+            ];
+            plantReply = jokes[Math.floor(Math.random() * jokes.length)];
+        }
+        else if (msg.includes("sing") || msg.includes("song") || msg.includes("music")) {
+            plantReply = "🎵 You are the sunshine of my life... That's why I'll always be around... 🎵 (I prefer classical music and jazz, by the way!) 🎻";
+        }
+        else if (msg === "hi" || msg === "hello" || msg.includes("hey") || msg.includes("good morning") || msg.includes("good evening")) {
+            const greetings = [
+                `Hello there! 👋 My AI brain is taking a nap, but my soil is currently at ${cSoil}%. Ask me for a vitals check! 🌿`,
+                `Hi! 🪴 I'm operating on my local survival protocols today. What can I help you with?`,
+                `Greetings! ☀️ Ready to talk about plants?`
+            ];
+            plantReply = greetings[Math.floor(Math.random() * greetings.length)];
+        }
+        
+        // Catch-all
         else {
-            plantReply = "Interesting... my tiny plant brain doesn't know the answer to that. But I can tell you about my origin, my care routine, or how I'm feeling right now!";
+            plantReply = `I'm disconnected from my cloud AI, so my conversational skills are limited! 😅 I can still report my specific sensors (try asking for "moisture" or "humidity"), or tell you about my light needs, origins, and plant facts! Ask away! 🌿`;
         }
+        
         setChatMessages(prev => [...prev, { sender: 'plant', text: plantReply }]);
-    }, 800);
+        setIsTyping(false);
+      }, 1000);
+    }
   };
 
   // Daily averages (past 7 days)
@@ -1392,7 +1536,7 @@ const Dashboard = () => {
         {/* Chat Widget */}
         <div className="card" style={{ flex: '2 1 400px', display: 'flex', flexDirection: 'column', height: '350px' }}>
           <h3 style={{ marginBottom: '1rem' }}>💬 Chat with your Plant</h3>
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '10px', marginBottom: '1rem' }}>
+          <div ref={chatContainerRef} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '10px', marginBottom: '1rem' }}>
             {chatMessages.map((msg, i) => (
               <div key={i} style={{
                 alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
@@ -1405,7 +1549,28 @@ const Dashboard = () => {
                 {msg.text}
               </div>
             ))}
+            {isTyping && (
+              <div style={{
+                alignSelf: 'flex-start',
+                background: 'rgba(255,255,255,0.05)',
+                color: '#94a3b8', padding: '10px 14px', borderRadius: '12px',
+                borderBottomLeftRadius: '2px',
+                maxWidth: '80%', fontSize: '0.9rem',
+                fontStyle: 'italic'
+              }}>
+                Typing...
+              </div>
+            )}
           </div>
+          {reminders.length > 0 && (
+            <div style={{ marginBottom: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+              {reminders.map((rem, i) => (
+                <span key={i} style={{ background: '#eab308', padding: '4px 8px', borderRadius: '12px', fontSize: '0.75rem', color: '#000', fontWeight: 'bold' }}>
+                  🔔 {rem}
+                </span>
+              ))}
+            </div>
+          )}
           <form onSubmit={handleChatSubmit} style={{ display: 'flex', gap: '10px' }}>
             <input 
               type="text" 
